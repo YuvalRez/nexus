@@ -170,3 +170,57 @@
   border-radius: 0.75rem;
   border: 1px solid var(--color-border);
 }
+
+/* Obsidian-style WYSIWYG Heading Indicators */
+.prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+  position: relative;
+}
+
+.prose h1.has-focus::before, .prose h2.has-focus::before, .prose h3.has-focus::before, .prose h4.has-focus::before, .prose h5.has-focus::before, .prose h6.has-focus::before {
+  position: absolute;
+  right: 100%;
+  opacity: 0.3;
+  font-weight: normal;
+  padding-right: 0.25em;
+  user-select: none;
+  pointer-events: none;
+  font-family: monospace;
+}
+
+.prose h1.has-focus::before { content: "# "; }
+.prose h2.has-focus::before { content: "## "; }
+.prose h3.has-focus::before { content: "### "; }
+.prose h4.has-focus::before { content: "#### "; }
+.prose h5.has-focus::before { content: "##### "; }
+.prose h6.has-focus::before { content: "###### "; }
+
+/* Milkdown Custom Wiki-Link Styles */
+.wiki-bracket {
+  transition: opacity 0.2s ease;
+}
+.wiki-bracket-hidden {
+  opacity: 0;
+  font-size: 0;
+  pointer-events: none;
+}
+.wiki-bracket-visible {
+  opacity: 1; /* Fully visible when editing */
+}
+.wiki-link-text {
+  /* Inherit default text color instead of blue */
+  color: inherit; 
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Fix milkdown default container style bleeding */
+.milkdown .editor {
+  outline: none !important;
+}
+
+/* Fix milkdown list block drops */
+.milkdown .editor li > p,
+.milkdown .editor li > div {
+  margin: 0 !important;
+  display: inline !important;
+}

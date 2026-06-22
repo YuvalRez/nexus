@@ -3,17 +3,20 @@
 import { useEffect, useState, useRef, use } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, getDocs, collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, updateDoc, arrayUnion } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
-import { Edit2, ArrowLeft, Users, File, Lock, FileUp, BookOpen, Save } from "lucide-react";
+import { Edit2, ArrowLeft, Users, File, Lock, FileUp, BookOpen, Save, Trash2, PlusCircle, ChevronLeft, ChevronRight, X, PanelRightClose, PanelRightOpen, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, rectSortingStrategy } from '@dnd-kit/sortable';
 import { SortableNoteItem } from "@/components/SortableNoteItem";
+import { SortableImageItem } from "@/components/SortableImageItem";
 import InviteModal from "@/components/InviteModal";
 import ConfirmModal from "@/components/ConfirmModal";
+import MilkdownEditor from "@/components/MilkdownEditor";
+import { uploadImageWithDeduplication } from "@/lib/imageUpload";
 
 export default function NexusPage({ params }) {
   const unwrappedParams = use(params);
@@ -26,20 +29,27 @@ export default function NexusPage({ params }) {
   const [activeNoteId, setActiveNoteId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [isDraggingMd, setIsDraggingMd] = useState(false);
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const [editorKeySuffix, setEditorKeySuffix] = useState(0);
+  const [zoomedImageIndex, setZoomedImageIndex] = useState(null);
   
   const [isEditingNexusName, setIsEditingNexusName] = useState(false);
   const [editNexusName, setEditNexusName] = useState("");
   const [isSavingNexus, setIsSavingNexus] = useState(false);
 
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
-  const [editContent, setEditContent] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  
+  const [galleryWidth, setGalleryWidth] = useState(320);
+  const [isGalleryCollapsed, setIsGalleryCollapsed] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
   
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState(null);
   const fileInputRef = useRef(null);
+  const imageInputRef = useRef(null);
   const scrollRef = useRef(null);
 
   const sensors = useSensors(
@@ -93,8 +103,75 @@ export default function NexusPage({ params }) {
     }
   }, [activeNoteId]);
 
+  // Load gallery settings from local storage
+  useEffect(() => {
+    const savedWidth = localStorage.getItem("nexus_gallery_width");
+    const savedCollapsed = localStorage.getItem("nexus_gallery_collapsed");
+    if (savedWidth) setGalleryWidth(parseInt(savedWidth, 10));
+    if (savedCollapsed) setIsGalleryCollapsed(savedCollapsed === "true");
+  }, []);
+
+  // Save gallery settings to local storage
+  useEffect(() => {
+    localStorage.setItem("nexus_gallery_width", galleryWidth.toString());
+    localStorage.setItem("nexus_gallery_collapsed", isGalleryCollapsed.toString());
+  }, [galleryWidth, isGalleryCollapsed]);
+
+  // Window mouse events for resizing
+  useEffect(() => {
+    if (!isResizing) return;
+    
+    const handleMouseMove = (e) => {
+      // Gallery is on the right, so width is screen width minus mouse X
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth > 150 && newWidth < window.innerWidth - 300) {
+        setGalleryWidth(newWidth);
+      }
+    };
+    
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+    
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing]);
+
   const activeNote = notes.find(n => n.id === activeNoteId);
   const isOwner = nexus?.ownerId === user?.uid;
+
+  const checkAndDeleteOrphanedImages = async (urlsToCheck) => {
+    if (!urlsToCheck || urlsToCheck.length === 0) return;
+    
+    for (const url of urlsToCheck) {
+      try {
+        const q = query(collection(db, "notes"), where("images", "array-contains", url));
+        const snapshots = await getDocs(q);
+        
+        if (snapshots.empty) {
+          console.log(`Image orphaned! Deleting globally: ${url}`);
+          await fetch('/api/deleteImage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+          });
+          
+          const imageRegistryQuery = query(collection(db, "images"), where("url", "==", url));
+          const registrySnaps = await getDocs(imageRegistryQuery);
+          registrySnaps.forEach(async (registryDoc) => {
+            await deleteDoc(doc(db, "images", registryDoc.id));
+          });
+        }
+      } catch (e) {
+        console.error(`Failed to garbage collect image ${url}:`, e);
+      }
+    }
+  };
 
   const uploadFiles = async (files) => {
     if (!isOwner || files.length === 0) return;
@@ -131,6 +208,10 @@ export default function NexusPage({ params }) {
       
       await updateDoc(doc(db, "nexuses", nexusId), { updatedAt: serverTimestamp() });
       if (lastActiveId) setActiveNoteId(lastActiveId);
+      
+      // Force Tiptap Editor to fully remount with the newly uploaded content
+      // by appending this incrementing suffix to its React key!
+      setEditorKeySuffix(prev => prev + 1);
     } catch (err) {
       console.error("Error uploading notes:", err);
       alert("Failed to upload notes.");
@@ -144,47 +225,139 @@ export default function NexusPage({ params }) {
     uploadFiles(Array.from(e.target.files));
   };
 
-  const handleDragOver = (e) => {
+  const handleMdDragOver = (e) => {
     e.preventDefault();
     if (isOwner && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes("Files")) {
-      setIsDraggingFile(true);
+      setIsDraggingMd(true);
     }
   };
 
-  const handleDragLeave = (e) => {
+  const handleMdDragLeave = (e) => {
     e.preventDefault();
-    // Prevent flickering when dragging over child elements by checking if we actually left the window
-    if (!e.relatedTarget || e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
-      setIsDraggingFile(false);
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setIsDraggingMd(false);
     }
   };
 
-  const handleDrop = (e) => {
+  const handleMdDrop = async (e) => {
     e.preventDefault();
-    setIsDraggingFile(false);
+    setIsDraggingMd(false);
     if (!isOwner) return;
-    uploadFiles(Array.from(e.dataTransfer.files));
+
+    const files = Array.from(e.dataTransfer.files);
+    const markdownFiles = files.filter(f => f.name.endsWith(".md"));
+
+    if (markdownFiles.length > 0) {
+      uploadFiles(markdownFiles);
+    }
+  };
+
+  const handleImageDragOver = (e) => {
+    e.preventDefault();
+    if (isOwner && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes("Files")) {
+      setIsDraggingImage(true);
+    }
+  };
+
+  const handleImageDragLeave = (e) => {
+    e.preventDefault();
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setIsDraggingImage(false);
+    }
+  };
+
+  const handleImageDrop = async (e) => {
+    e.preventDefault();
+    setIsDraggingImage(false);
+    if (!isOwner || !activeNoteId) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    const imageFiles = files.filter(f => f.type.startsWith("image/"));
+
+    if (imageFiles.length > 0) {
+      await handleImageUpload(imageFiles);
+    }
+  };
+
+  const handleImageUpload = async (files) => {
+    if (!isOwner || !activeNoteId || files.length === 0) return;
+    setIsUploadingImage(true);
+    try {
+      for (const file of files) {
+        if (!file.type.startsWith("image/")) continue;
+        const imageUrl = await uploadImageWithDeduplication(file);
+        await updateDoc(doc(db, "notes", activeNoteId), {
+          images: arrayUnion(imageUrl),
+          updatedAt: serverTimestamp()
+        });
+      }
+    } catch (err) {
+      console.error("Failed to upload images:", err);
+      alert(`Failed to upload image: ${err.message || err}`);
+    } finally {
+      setIsUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  };
+
+  const handleCreateNote = async () => {
+    if (!isOwner) return;
+    try {
+      const docRef = await addDoc(collection(db, "notes"), {
+        nexusId,
+        title: "Untitled Note",
+        content: "",
+        images: [],
+        order: notes.length,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setActiveNoteId(docRef.id);
+      setEditTitle("Untitled Note");
+      setIsEditingTitle(true);
+    } catch (err) {
+      console.error("Failed to create note:", err);
+    }
   };
 
   const handleDragEnd = async (event) => {
-    if (!isOwner) return;
-    
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const oldIndex = notes.findIndex((n) => n.id === active.id);
-    const newIndex = notes.findIndex((n) => n.id === over.id);
     
-    const newNotes = arrayMove(notes, oldIndex, newIndex);
-    setNotes(newNotes);
+    if (active.id !== over.id) {
+      const oldIndex = notes.findIndex((n) => n.id === active.id);
+      const newIndex = notes.findIndex((n) => n.id === over.id);
+      
+      const newNotes = arrayMove(notes, oldIndex, newIndex);
+      setNotes(newNotes);
+      
+      // Update all changed orders in Firestore
+      try {
+        const batchUpdate = newNotes.map((note, index) => 
+          updateDoc(doc(db, "notes", note.id), { order: index })
+        );
+        await Promise.all(batchUpdate);
+      } catch (err) {
+        console.error("Error reordering notes:", err);
+      }
+    }
+  };
 
-    try {
-      const promises = newNotes.map((note, index) => 
-        updateDoc(doc(db, "notes", note.id), { order: index })
-      );
-      await Promise.all(promises);
-    } catch (err) {
-      console.error("Failed to reorder notes:", err);
+  const handleGalleryDragEnd = async (event) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id && activeNote) {
+      const oldIndex = activeNote.images.indexOf(active.id);
+      const newIndex = activeNote.images.indexOf(over.id);
+      
+      const newImages = arrayMove(activeNote.images, oldIndex, newIndex);
+      
+      // Update Firestore
+      try {
+        await updateDoc(doc(db, "notes", activeNote.id), {
+          images: newImages
+        });
+      } catch (err) {
+        console.error("Error reordering images:", err);
+      }
     }
   };
 
@@ -196,8 +369,12 @@ export default function NexusPage({ params }) {
       confirmText: "Delete Note",
       onConfirm: async () => {
         try {
+          const noteImages = notes.find(n => n.id === noteId)?.images || [];
           await deleteDoc(doc(db, "notes", noteId));
           if (activeNoteId === noteId) setActiveNoteId(null);
+          
+          // Trigger garbage collection for images that were in this note
+          checkAndDeleteOrphanedImages(noteImages);
         } catch (err) {
           console.error("Failed to delete note:", err);
         }
@@ -205,28 +382,35 @@ export default function NexusPage({ params }) {
     });
   };
 
-  const startEditing = () => {
+  const startEditingTitle = () => {
     if (!isOwner || !activeNote) return;
     setEditTitle(activeNote.title);
-    setEditContent(activeNote.content);
-    setIsEditing(true);
+    setIsEditingTitle(true);
   };
 
-  const saveNote = async () => {
+  const saveTitle = async () => {
     if (!isOwner || !activeNote) return;
-    setIsSaving(true);
     try {
       await updateDoc(doc(db, "notes", activeNote.id), {
         title: editTitle,
-        content: editContent,
         updatedAt: serverTimestamp()
       });
-      setIsEditing(false);
+      setIsEditingTitle(false);
     } catch (err) {
-      console.error("Failed to save note:", err);
-      alert("Failed to save note");
-    } finally {
-      setIsSaving(false);
+      console.error("Failed to save title:", err);
+      alert("Failed to save title");
+    }
+  };
+
+  const saveContent = async (newContent) => {
+    if (!isOwner || !activeNote) return;
+    try {
+      await updateDoc(doc(db, "notes", activeNote.id), {
+        content: newContent,
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.error("Failed to auto-save content:", err);
     }
   };
 
@@ -283,22 +467,25 @@ export default function NexusPage({ params }) {
   }
 
   return (
-    <div 
-      className="flex h-screen bg-background overflow-hidden animate-fade-in-up relative"
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      {isDraggingFile && (
-        <div className="absolute inset-0 z-50 bg-primary-500/20 backdrop-blur-sm border-4 border-primary-500 border-dashed flex items-center justify-center pointer-events-none transition-all">
-          <div className="bg-card p-10 rounded-3xl shadow-2xl flex flex-col items-center transform scale-110">
-            <FileUp className="w-16 h-16 text-primary-500 mb-4 animate-bounce" />
-            <p className="font-bold text-2xl text-primary-500">Drop your Markdown files anywhere!</p>
+    <div className="flex h-screen bg-background overflow-hidden animate-fade-in-up">
+      
+      {/* Markdown Drag Zone Wrapper (Left Side) */}
+      <div 
+        className="flex-1 flex relative"
+        onDragOver={handleMdDragOver}
+        onDragLeave={handleMdDragLeave}
+        onDrop={handleMdDrop}
+      >
+        {isDraggingMd && (
+          <div className="absolute inset-0 z-50 bg-primary-500/20 backdrop-blur-sm border-4 border-primary-500 border-dashed flex items-center justify-center transition-all">
+            <div className="bg-card p-10 rounded-3xl shadow-2xl flex flex-col items-center transform scale-110 pointer-events-none">
+              <FileUp className="w-16 h-16 text-primary-500 mb-4 animate-bounce" />
+              <p className="font-bold text-2xl text-primary-500">Drop your Markdown files here!</p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Sidebar */}
+        {/* Sidebar */}
       <div className="w-72 bg-card border-r border-border flex flex-col flex-shrink-0 relative z-20 shadow-2xl">
         <div className="p-4 border-b border-border">
           <Link href="/dashboard" className="flex items-center gap-2 text-sm text-foreground/60 hover:text-foreground mb-4 transition-colors">
@@ -372,7 +559,7 @@ export default function NexusPage({ params }) {
         </div>
 
         {isOwner && (
-          <div className="p-4 border-t border-border bg-card">
+          <div className="p-4 border-t border-border bg-card flex gap-2">
             <input
               type="file"
               accept=".md"
@@ -382,102 +569,70 @@ export default function NexusPage({ params }) {
               className="hidden"
             />
             <button
+              onClick={handleCreateNote}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-primary-600 text-white font-medium rounded-xl hover:bg-primary-700 transition-all shadow-sm"
+              title="New Note"
+            >
+              <Edit2 className="w-4 h-4" />
+              New
+            </button>
+            <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary-600/10 text-primary-500 border border-primary-500/20 font-medium rounded-xl hover:bg-primary-600 hover:text-white hover:border-primary-600 transition-all"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-primary-600/10 text-primary-500 border border-primary-500/20 font-medium rounded-xl hover:bg-primary-500 hover:text-white transition-all"
+              title="Upload Markdown"
             >
               <FileUp className="w-4 h-4" />
-              Upload Markdown
+              Upload
             </button>
           </div>
         )}
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col bg-background relative z-10 overflow-hidden">
+      <div className="flex-1 flex bg-background relative z-10 overflow-hidden">
         {activeNote ? (
           <>
-            <header className="h-16 border-b border-border flex items-center justify-between px-6 bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-              {isEditing ? (
-                <input 
-                  type="text"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="bg-background border border-border px-3 py-1.5 rounded-lg font-bold text-lg focus:outline-none focus:ring-2 focus:ring-primary-500 w-1/2"
-                />
-              ) : (
-                <h1 className="font-bold text-xl truncate">{activeNote.title}</h1>
-              )}
-              
-              {isOwner && (
-                <div>
-                  {isEditing ? (
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => setIsEditing(false)}
-                        className="px-4 py-2 text-sm hover:bg-foreground/5 rounded-lg transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button 
-                        onClick={saveNote}
-                        disabled={isSaving}
-                        className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors disabled:opacity-50"
-                      >
-                        <Save className="w-4 h-4" />
-                        {isSaving ? "Saving..." : "Save Note"}
-                      </button>
-                    </div>
-                  ) : (
-                    <button 
-                      onClick={startEditing}
-                      className="flex items-center gap-2 px-4 py-2 bg-foreground/5 hover:bg-foreground/10 rounded-lg text-sm font-medium transition-colors"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                      Edit Note
-                    </button>
-                  )}
-                </div>
-              )}
-            </header>
-            
-            <div ref={scrollRef} className="flex-1 overflow-y-auto">
-              <div className="max-w-4xl mx-auto p-8 md:p-12">
-                {isEditing ? (
-                  <textarea
-                    value={editContent}
-                    onChange={(e) => setEditContent(e.target.value)}
-                    className="w-full h-[70vh] bg-background border border-border rounded-xl p-6 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none shadow-inner"
-                    placeholder="Write your markdown here..."
+            <div className="flex-1 flex flex-col min-w-0">
+              <header className="h-16 border-b border-border flex items-center justify-between px-6 bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+                {isEditingTitle ? (
+                  <input 
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && saveTitle()}
+                    onBlur={saveTitle}
+                    autoFocus
+                    className="bg-background border border-border px-3 py-1.5 rounded-lg font-bold text-xl focus:outline-none focus:ring-2 focus:ring-primary-500 w-1/2"
                   />
                 ) : (
-                  <div className="prose prose-invert lg:prose-lg mx-auto">
-                    <ReactMarkdown remarkPlugins={[remarkBreaks]}>
-                      {activeNote.content
-                        .replace(/\[\[([^|\]]+)(?:\|([^\]]+))?\]\]/g, (match, target, display) => {
-                          return display ? display : target;
-                        })
-                        .split('\n')
-                        .map(line => {
-                          const match = line.match(/^([ \t]+)/);
-                          if (match) {
-                            const indentChars = match[1];
-                            const restOfLine = line.slice(indentChars.length);
-                            const isListItem = /^([-*+]|\d+\.)\s/.test(restOfLine);
-                            if (!isListItem) {
-                              const visualIndent = indentChars.replace(/\t/g, '\u00A0\u00A0\u00A0\u00A0').replace(/ /g, '\u00A0');
-                              return visualIndent + restOfLine;
-                            } else {
-                              const parserIndent = indentChars.replace(/\t/g, '    ');
-                              return parserIndent + restOfLine;
-                            }
-                          }
-                          return line;
-                        })
-                        .join('\n')
-                      }
-                    </ReactMarkdown>
+                  <div className="flex items-center gap-2 group cursor-pointer" onClick={startEditingTitle}>
+                    <h1 className="font-bold text-xl truncate">{activeNote.title}</h1>
+                    {isOwner && <Edit2 className="w-4 h-4 opacity-0 group-hover:opacity-100 text-foreground/40 hover:text-primary-500 transition-all" />}
                   </div>
                 )}
+                
+                {/* Removed auto-saving indicator */}
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => setIsGalleryCollapsed(!isGalleryCollapsed)}
+                    className="p-1.5 hover:bg-foreground/10 rounded-lg text-foreground/60 hover:text-foreground transition-all"
+                    title={isGalleryCollapsed ? "Show Gallery" : "Hide Gallery"}
+                  >
+                    {isGalleryCollapsed ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
+                  </button>
+                </div>
+              </header>
+              
+              {/* Left Side: Milkdown Live Preview Editor */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-background relative flex flex-col items-center">
+                <div className="w-full max-w-[800px] mt-8 mb-24">
+                  <MilkdownEditor 
+                    key={`${activeNote.id}-${editorKeySuffix}`}
+                    initialContent={activeNote.content || ""} 
+                    onChange={saveContent} 
+                    isEditable={isOwner}
+                  />
+                </div>
               </div>
             </div>
           </>
@@ -485,10 +640,113 @@ export default function NexusPage({ params }) {
           <div className="flex-1 flex flex-col items-center justify-center text-foreground/40 p-8">
             <BookOpen className="w-16 h-16 mb-4 opacity-50" />
             <p className="text-lg font-medium text-foreground/60">Select a note from the sidebar</p>
-            {isOwner && <p className="text-sm mt-2">or upload new markdown files to get started.</p>}
           </div>
         )}
       </div>
+      </div>
+
+      {/* Right Side: Image Gallery (Only if note is active) */}
+      {activeNote && (
+        <div 
+          style={{ width: isGalleryCollapsed ? '0px' : `${galleryWidth}px`, transition: isResizing ? 'none' : 'width 0.3s ease' }}
+          className="border-l border-border bg-card flex flex-col flex-shrink-0 z-20 relative overflow-hidden"
+          onDragOver={handleImageDragOver}
+          onDragLeave={handleImageDragLeave}
+          onDrop={handleImageDrop}
+        >
+          {/* Invisible Resizer Handle */}
+          {!isGalleryCollapsed && (
+            <div 
+              className="w-1.5 cursor-col-resize absolute left-0 top-0 bottom-0 z-30 hover:bg-primary-500/50 transition-colors"
+              onMouseDown={() => setIsResizing(true)}
+            />
+          )}
+          {isDraggingImage && (
+            <div className="absolute inset-0 z-50 bg-primary-500/20 backdrop-blur-sm border-4 border-primary-500 border-dashed flex items-center justify-center transition-all">
+              <div className="bg-card p-6 rounded-3xl shadow-2xl flex flex-col items-center transform scale-110 pointer-events-none text-center">
+                <PlusCircle className="w-12 h-12 text-primary-500 mb-3 animate-bounce" />
+                <p className="font-bold text-lg text-primary-500">Drop Images to Gallery</p>
+              </div>
+            </div>
+          )}
+
+          <div className="h-16 border-b border-border flex items-center justify-between px-6 bg-card/50 backdrop-blur-sm sticky top-0 min-w-[200px]">
+            <h3 className="font-semibold flex items-center gap-2 whitespace-nowrap">
+              Gallery
+              {isUploadingImage && <div className="w-3 h-3 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>}
+            </h3>
+            <button 
+              onClick={() => setGalleryWidth(320)}
+              title="Reset width"
+              className="p-1.5 hover:bg-foreground/10 rounded-lg text-foreground/60 hover:text-foreground transition-all"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          </div>
+          <div 
+            className="flex-1 overflow-y-auto p-4 flex flex-wrap gap-4 items-start content-start"
+          >
+            {activeNote.images && activeNote.images.length > 0 ? (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleGalleryDragEnd}
+              >
+                <SortableContext
+                  items={activeNote.images}
+                  strategy={rectSortingStrategy}
+                >
+                  {activeNote.images.map((url, idx) => (
+                    <SortableImageItem 
+                      key={url} // ID must match the string URL exactly
+                      url={url}
+                      idx={idx}
+                      isOwner={isOwner}
+                      setZoomedImageIndex={setZoomedImageIndex}
+                      onRemove={(urlToRemove) => {
+                        setConfirmConfig({
+                          title: "Delete Image",
+                          message: "Are you sure you want to permanently delete this image from the gallery?",
+                          onConfirm: async () => {
+                            await updateDoc(doc(db, "notes", activeNote.id), {
+                              images: activeNote.images.filter((url) => url !== urlToRemove)
+                            });
+                            checkAndDeleteOrphanedImages([urlToRemove]);
+                          }
+                        });
+                      }}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+            ) : (
+              <div className="text-center py-10 px-4 border-2 border-dashed border-border rounded-xl">
+                <p className="text-sm text-foreground/50">No images yet.</p>
+              </div>
+            )}
+
+            {isOwner && (
+              <div style={{ flex: '0 1 200px' }}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  ref={imageInputRef}
+                  onChange={(e) => handleImageUpload(Array.from(e.target.files))}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => imageInputRef.current?.click()}
+                  className="w-full aspect-square border-2 border-dashed border-primary-500/30 rounded-xl hover:border-primary-500 hover:bg-primary-500/5 transition-all flex flex-col items-center justify-center gap-2 text-primary-500"
+                >
+                  <PlusCircle className="w-6 h-6" />
+                  <span className="text-sm font-medium">Add Images</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <InviteModal 
         isOpen={isInviteModalOpen} 
@@ -501,6 +759,59 @@ export default function NexusPage({ params }) {
         onClose={() => setConfirmConfig(null)} 
         {...confirmConfig} 
       />
+
+      {/* Fullscreen Image Lightbox */}
+      {zoomedImageIndex !== null && activeNote && activeNote.images && (
+        <div 
+          className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-center justify-center animate-fade-in select-none"
+          onClick={() => setZoomedImageIndex(null)}
+        >
+          {/* Previous Area (Left Bar) */}
+          <div 
+            className="absolute left-0 top-0 bottom-0 w-24 sm:w-32 flex items-center justify-start pl-4 sm:pl-8 group cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              setZoomedImageIndex(prev => prev > 0 ? prev - 1 : activeNote.images.length - 1);
+            }}
+          >
+            <div className="bg-black/50 p-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+              <ChevronLeft className="w-10 h-10 text-white" />
+            </div>
+          </div>
+
+          {/* Next Area (Right Bar) */}
+          <div 
+            className="absolute right-0 top-0 bottom-0 w-24 sm:w-32 flex items-center justify-end pr-4 sm:pr-8 group cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              setZoomedImageIndex(prev => prev < activeNote.images.length - 1 ? prev + 1 : 0);
+            }}
+          >
+            <div className="bg-black/50 p-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+              <ChevronRight className="w-10 h-10 text-white" />
+            </div>
+          </div>
+
+          {/* The Zoomed Image */}
+          <img 
+            src={activeNote.images[zoomedImageIndex]} 
+            alt="Zoomed Fullscreen" 
+            className="max-w-full max-h-full object-contain pointer-events-none"
+          />
+
+          {/* Close Button */}
+          <button 
+            className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors bg-black/20 hover:bg-black/40 p-2 rounded-full"
+            onClick={(e) => {
+              e.stopPropagation();
+              setZoomedImageIndex(null);
+            }}
+          >
+            <X className="w-8 h-8" />
+          </button>
+        </div>
+      )}
+
     </div>
   );
 }
