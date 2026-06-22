@@ -91,44 +91,36 @@ export default function InviteModal({ isOpen, onClose, nexus }) {
     setMessage("");
 
     try {
+      // Check if user exists and is already a member
       const q = query(collection(db, "users"), where("email", "==", email.trim().toLowerCase()));
       const userSnap = await getDocs(q);
 
       if (!userSnap.empty) {
         const invitedUser = userSnap.docs[0];
-        
-        // Check if already a member
         if (nexus.memberIds.includes(invitedUser.id)) {
            setStatus("error");
            setMessage("User is already a viewer in this Nexus.");
            return;
         }
-
-        const nexusRef = doc(db, "nexuses", nexus.id);
-        await updateDoc(nexusRef, {
-          memberIds: arrayUnion(invitedUser.id)
-        });
-        setStatus("success");
-        setMessage("User added to Nexus successfully!");
-      } else {
-        // Check if pending invite already exists
-        const pendingQ = query(collection(db, "pendingInvites"), where("nexusId", "==", nexus.id), where("email", "==", email.trim().toLowerCase()));
-        const pendingSnap = await getDocs(pendingQ);
-        
-        if (!pendingSnap.empty) {
-          setStatus("error");
-          setMessage("An invite has already been sent to this email.");
-          return;
-        }
-
-        await addDoc(collection(db, "pendingInvites"), {
-          nexusId: nexus.id,
-          email: email.trim().toLowerCase(),
-          createdAt: serverTimestamp()
-        });
-        setStatus("success");
-        setMessage("Invite sent! They will get access when they sign up.");
       }
+
+      // Check if pending invite already exists
+      const pendingQ = query(collection(db, "pendingInvites"), where("nexusId", "==", nexus.id), where("email", "==", email.trim().toLowerCase()));
+      const pendingSnap = await getDocs(pendingQ);
+      
+      if (!pendingSnap.empty) {
+        setStatus("error");
+        setMessage("An invite has already been sent to this email.");
+        return;
+      }
+
+      await addDoc(collection(db, "pendingInvites"), {
+        nexusId: nexus.id,
+        email: email.trim().toLowerCase(),
+        createdAt: serverTimestamp()
+      });
+      setStatus("success");
+      setMessage("Invite sent! They must accept it on their dashboard.");
       setEmail("");
     } catch (err) {
       console.error("Failed to invite:", err);

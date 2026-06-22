@@ -48,25 +48,20 @@ export default function NexusPage({ params }) {
   useEffect(() => {
     if (!user || !nexusId) return;
 
-    const fetchNexus = async () => {
-      try {
-        const docRef = doc(db, "nexuses", nexusId);
-        const docSnap = await getDoc(docRef);
-        
-        if (!docSnap.exists() || !docSnap.data().memberIds.includes(user.uid)) {
-          setError("Nexus not found or you don't have access.");
-          setLoading(false);
-          return;
-        }
-        
-        setNexus({ id: docSnap.id, ...docSnap.data() });
-      } catch (err) {
-        console.error("Error fetching nexus:", err);
-        setError("Failed to load Nexus.");
+    const docRef = doc(db, "nexuses", nexusId);
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (!docSnap.exists() || !docSnap.data().memberIds.includes(user.uid)) {
+        setError("Nexus not found or you don't have access.");
+        setLoading(false);
+        return;
       }
-    };
+      setNexus({ id: docSnap.id, ...docSnap.data() });
+    }, (err) => {
+      console.error("Error fetching nexus:", err);
+      setError("Failed to load Nexus.");
+    });
 
-    fetchNexus();
+    return () => unsubscribe();
   }, [user, nexusId]);
 
   useEffect(() => {

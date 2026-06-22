@@ -3,37 +3,58 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, writeBatch } from "firebase/firestore";
+import { collection, query, where, addDoc, serverTimestamp, doc, writeBatch, onSnapshot, updateDoc, arrayUnion, arrayRemove, deleteDoc, getDoc } from "firebase/firestore";
 import Link from "next/link";
-import { Plus, Folder, Clock, X, Trash2 } from "lucide-react";
+import { Plus, Folder, Clock, X, Trash2, LogOut, Check, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const [nexuses, setNexuses] = useState([]);
+  const [pendingInvites, setPendingInvites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [newNexusName, setNewNexusName] = useState("");
 
   useEffect(() => {
-    if (user) {
-      loadNexuses();
-    }
-  }, [user]);
+    if (!user) return;
 
-  const loadNexuses = async () => {
-    try {
-      const q = query(collection(db, "nexuses"), where("memberIds", "array-contains", user.uid));
-      const snap = await getDocs(q);
+    // Listen to Nexuses where user is a member
+    const nexusesQ = query(collection(db, "nexuses"), where("memberIds", "array-contains", user.uid));
+    const unsubscribeNexuses = onSnapshot(nexusesQ, (snap) => {
       const loaded = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setNexuses(loaded.sort((a, b) => b.updatedAt?.toMillis() - a.updatedAt?.toMillis()));
-    } catch (err) {
-      console.error("Failed to load nexuses:", err);
-    } finally {
+      setNexuses(loaded.sort((a, b) => (b.updatedAt?.toMillis() || 0) - (a.updatedAt?.toMillis() || 0)));
       setLoading(false);
-    }
-  };
+    });
+
+    // Listen to Pending Invites for user's email
+    const invitesQ = query(collection(db, "pendingInvites"), where("email", "==", user.email));
+    const unsubscribeInvites = onSnapshot(invitesQ, async (snap) => {
+      const invites = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // Fetch the Nexus names for the invites to display them nicely
+      const enrichedInvites = await Promise.all(invites.map(async (invite) => {
+        try {
+          const nexusSnap = await getDoc(doc(db, "nexuses", invite.nexusId));
+          if (nexusSnap.exists()) {
+            return { ...invite, nexusName: nexusSnap.data().name };
+          }
+          return invite;
+        } catch (err) {
+          return invite;
+        }
+      }));
+      
+      // Filter out any invites where the Nexus was deleted
+      setPendingInvites(enrichedInvites.filter(i => i.nexusName));
+    });
+
+    return () => {
+      unsubscribeNexuses();
+      unsubscribeInvites();
+    };
+  }, [user]);
 
   const handleCreateNexus = async (e) => {
     e.preventDefault();
@@ -70,9 +91,44 @@ export default function DashboardPage() {
         });
         
         await batch.commit();
-        setNexuses(nexuses.filter(n => n.id !== nexusId));
       } catch (err) {
         console.error("Failed to delete nexus:", err);
+      }
+    }
+  };
+
+  const handleLeaveNexus = async (nexusId, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (window.confirm("Are you sure you want to leave this Nexus? You will lose access to its notes.")) {
+      try {
+        await updateDoc(doc(db, "nexuses", nexusId), {
+          memberIds: arrayRemove(user.uid)
+        });
+      } catch (err) {
+        console.error("Failed to leave nexus:", err);
+      }
+    }
+  };
+
+  const handleAcceptInvite = async (invite) => {
+    try {
+      await updateDoc(doc(db, "nexuses", invite.nexusId), {
+        memberIds: arrayUnion(user.uid)
+      });
+      await deleteDoc(doc(db, "pendingInvites", invite.id));
+    } catch (err) {
+      console.error("Failed to accept invite:", err);
+      alert("Failed to accept invite");
+    }
+  };
+
+  const handleDeclineInvite = async (inviteId) => {
+    if (window.confirm("Are you sure you want to decline this invitation?")) {
+      try {
+        await deleteDoc(doc(db, "pendingInvites", inviteId));
+      } catch (err) {
+        console.error("Failed to decline invite:", err);
       }
     }
   };
@@ -109,6 +165,41 @@ export default function DashboardPage() {
       </header>
 
       <main className="container mx-auto px-6 py-12 max-w-5xl animate-fade-in-up">
+        
+        {/* Pending Invites Section */}
+        {pendingInvites.length > 0 && (
+          <div className="mb-12">
+            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+              <Mail className="w-6 h-6 text-primary-500" />
+              Pending Invitations
+            </h2>
+            <div className="grid gap-4">
+              {pendingInvites.map((invite) => (
+                <div key={invite.id} className="bg-primary-500/10 border border-primary-500/20 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+                  <div>
+                    <h3 className="font-semibold text-lg text-primary-600">You've been invited to "{invite.nexusName}"</h3>
+                    <p className="text-sm text-foreground/60 mt-1">Accept the invitation to collaborate and view markdown notes.</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button 
+                      onClick={() => handleAcceptInvite(invite)}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
+                    >
+                      <Check className="w-4 h-4" /> Accept
+                    </button>
+                    <button 
+                      onClick={() => handleDeclineInvite(invite.id)}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-background border border-border rounded-lg text-sm font-medium hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/30 transition-colors"
+                    >
+                      <X className="w-4 h-4" /> Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
             <h2 className="text-3xl font-bold mb-2">Your Workspaces</h2>
@@ -177,12 +268,21 @@ export default function DashboardPage() {
                   <div className="w-10 h-10 bg-primary-500/10 rounded-xl flex items-center justify-center text-primary-500">
                     <Folder className="w-5 h-5" />
                   </div>
-                  {nexus.ownerId === user?.uid && (
+                  {nexus.ownerId === user?.uid ? (
                     <button
                       onClick={(e) => handleDeleteNexus(nexus.id, e)}
                       className="p-2 text-foreground/30 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                      title="Delete Nexus"
                     >
                       <Trash2 className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={(e) => handleLeaveNexus(nexus.id, e)}
+                      className="p-2 text-foreground/30 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                      title="Leave Nexus"
+                    >
+                      <LogOut className="w-4 h-4" />
                     </button>
                   )}
                 </div>
