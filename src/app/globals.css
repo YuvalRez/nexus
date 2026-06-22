@@ -213,9 +213,17 @@
   text-underline-offset: 2px;
 }
 
-/* Fix milkdown default container style bleeding */
+/* Fix milkdown default container style bleeding and expand to fill space */
+.milkdown,
+[data-milkdown-root="true"] {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
 .milkdown .editor {
   outline: none !important;
+  flex-grow: 1;
+  min-height: 500px;
 }
 
 /* Fix milkdown list block drops */

@@ -134,11 +134,11 @@ function buildDecorations(doc, selection, isFocusedView) {
   const decorations = [];
   
   // Find the currently active block node to add a "has-focus" class for heading pseudo-elements
-  if (isFocusedView && selection && selection.$from) {
+  if (isFocusedView && selection && selection.$from && selection.$from.depth > 0) {
     const $from = selection.$from;
-    // Get the start position of the current block node
-    const blockPos = $from.before($from.depth);
     try {
+      // Get the start position of the current block node
+      const blockPos = $from.before($from.depth);
       // Add 'has-focus' class to the block node
       decorations.push(Decoration.node(blockPos, blockPos + $from.parent.nodeSize, { class: 'has-focus' }));
     } catch (e) {
@@ -226,7 +226,7 @@ const MilkdownEditorContent = ({ initialContent, onChange, isEditable }) => {
 export default function MilkdownEditor({ initialContent, onChange, isEditable = true }) {
   // Use a wrapper div with Tailwind prose to maintain our typography
   return (
-    <div className="prose prose-invert max-w-none w-full outline-none focus:outline-none min-h-[500px] milkdown-container">
+    <div className="prose prose-invert max-w-none w-full outline-none focus:outline-none min-h-[500px] flex-1 flex flex-col milkdown-container">
       <MilkdownProvider>
         <MilkdownEditorContent initialContent={initialContent} onChange={onChange} isEditable={isEditable} />
       </MilkdownProvider>

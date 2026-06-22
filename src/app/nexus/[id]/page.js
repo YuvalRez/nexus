@@ -636,9 +636,9 @@ export default function NexusPage({ params }) {
               
               {/* Left Side: Milkdown Live Preview Editor */}
               <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-background relative flex flex-col items-center">
-                <div className="w-full max-w-[800px] mt-8 mb-24">
+                <div className="w-full max-w-[800px] mt-8 flex-1 flex flex-col">
                   <MilkdownEditor 
-                    key={`${activeNote.id}-${editorKeySuffix}`}
+                    key={isOwner ? `${activeNote.id}-${editorKeySuffix}` : `${activeNote.id}-${activeNote.updatedAt?.toMillis() || 'viewer'}`}
                     initialContent={activeNote.content || ""} 
                     onChange={saveContent} 
                     isEditable={isOwner}
