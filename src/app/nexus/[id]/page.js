@@ -489,7 +489,7 @@ export default function NexusPage({ params }) {
       <InviteModal 
         isOpen={isInviteModalOpen} 
         onClose={() => setIsInviteModalOpen(false)} 
-        nexusId={nexusId} 
+        nexus={nexus} 
       />
     </div>
   );
