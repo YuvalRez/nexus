@@ -7,6 +7,7 @@ import { collection, query, where, addDoc, serverTimestamp, doc, writeBatch, onS
 import Link from "next/link";
 import { Plus, Folder, Clock, X, Trash2, LogOut, Check, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
+import ConfirmModal from "@/components/ConfirmModal";
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
@@ -16,6 +17,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [newNexusName, setNewNexusName] = useState("");
+  const [confirmConfig, setConfirmConfig] = useState(null);
 
   useEffect(() => {
     if (!user) return;
@@ -76,39 +78,49 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDeleteNexus = async (nexusId, e) => {
+  const handleDeleteNexus = (nexusId, e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (window.confirm("Are you sure you want to delete this Nexus? This will delete all notes inside it permanently.")) {
-      try {
-        const batch = writeBatch(db);
-        batch.delete(doc(db, "nexuses", nexusId));
-        
-        const notesQ = query(collection(db, "notes"), where("nexusId", "==", nexusId));
-        const notesSnap = await getDocs(notesQ);
-        notesSnap.docs.forEach((doc) => {
-          batch.delete(doc.ref);
-        });
-        
-        await batch.commit();
-      } catch (err) {
-        console.error("Failed to delete nexus:", err);
+    setConfirmConfig({
+      title: "Delete Nexus",
+      message: "Are you sure you want to delete this Nexus? This will delete all notes inside it permanently.",
+      confirmText: "Delete Nexus",
+      onConfirm: async () => {
+        try {
+          const batch = writeBatch(db);
+          batch.delete(doc(db, "nexuses", nexusId));
+          
+          const notesQ = query(collection(db, "notes"), where("nexusId", "==", nexusId));
+          const notesSnap = await getDocs(notesQ);
+          notesSnap.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+          });
+          
+          await batch.commit();
+        } catch (err) {
+          console.error("Failed to delete nexus:", err);
+        }
       }
-    }
+    });
   };
 
-  const handleLeaveNexus = async (nexusId, e) => {
+  const handleLeaveNexus = (nexusId, e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (window.confirm("Are you sure you want to leave this Nexus? You will lose access to its notes.")) {
-      try {
-        await updateDoc(doc(db, "nexuses", nexusId), {
-          memberIds: arrayRemove(user.uid)
-        });
-      } catch (err) {
-        console.error("Failed to leave nexus:", err);
+    setConfirmConfig({
+      title: "Leave Nexus",
+      message: "Are you sure you want to leave this Nexus? You will lose access to its notes.",
+      confirmText: "Leave Nexus",
+      onConfirm: async () => {
+        try {
+          await updateDoc(doc(db, "nexuses", nexusId), {
+            memberIds: arrayRemove(user.uid)
+          });
+        } catch (err) {
+          console.error("Failed to leave nexus:", err);
+        }
       }
-    }
+    });
   };
 
   const handleAcceptInvite = async (invite) => {
@@ -123,14 +135,19 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDeclineInvite = async (inviteId) => {
-    if (window.confirm("Are you sure you want to decline this invitation?")) {
-      try {
-        await deleteDoc(doc(db, "pendingInvites", inviteId));
-      } catch (err) {
-        console.error("Failed to decline invite:", err);
+  const handleDeclineInvite = (inviteId) => {
+    setConfirmConfig({
+      title: "Decline Invitation",
+      message: "Are you sure you want to decline this invitation?",
+      confirmText: "Decline",
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, "pendingInvites", inviteId));
+        } catch (err) {
+          console.error("Failed to decline invite:", err);
+        }
       }
-    }
+    });
   };
 
   if (loading) {
@@ -305,6 +322,12 @@ export default function DashboardPage() {
           )}
         </div>
       </main>
+
+      <ConfirmModal 
+        isOpen={!!confirmConfig} 
+        onClose={() => setConfirmConfig(null)} 
+        {...confirmConfig} 
+      />
     </div>
   );
 }

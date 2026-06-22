@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, arrayUnion, arrayRemove, deleteDoc, serverTimestamp, getDoc } from "firebase/firestore";
 import { X, Send, AlertCircle, CheckCircle2, Users, Clock, Mail, Trash2 } from "lucide-react";
+import ConfirmModal from "@/components/ConfirmModal";
 
 export default function InviteModal({ isOpen, onClose, nexus }) {
   const [activeTab, setActiveTab] = useState("invite"); // "invite", "viewers", "pending"
@@ -20,6 +21,8 @@ export default function InviteModal({ isOpen, onClose, nexus }) {
   // Pending State
   const [pendingInvites, setPendingInvites] = useState([]);
   const [loadingPending, setLoadingPending] = useState(false);
+
+  const [confirmConfig, setConfirmConfig] = useState(null);
 
   // Reset modal state when closed
   useEffect(() => {
@@ -129,33 +132,51 @@ export default function InviteModal({ isOpen, onClose, nexus }) {
     }
   };
 
-  const handleRemoveViewer = async (userId) => {
-    if (!confirm("Are you sure you want to revoke access for this user?")) return;
-    try {
-      await updateDoc(doc(db, "nexuses", nexus.id), {
-        memberIds: arrayRemove(userId)
-      });
-      setViewers(prev => prev.filter(v => v.id !== userId));
-    } catch (err) {
-      console.error("Failed to remove viewer:", err);
-      alert("Failed to remove viewer");
-    }
+  const handleRemoveViewer = (userId) => {
+    setConfirmConfig({
+      title: "Revoke Access",
+      message: "Are you sure you want to revoke access for this user?",
+      confirmText: "Revoke",
+      onConfirm: async () => {
+        try {
+          await updateDoc(doc(db, "nexuses", nexus.id), {
+            memberIds: arrayRemove(userId)
+          });
+          setViewers(prev => prev.filter(v => v.id !== userId));
+        } catch (err) {
+          console.error("Failed to remove viewer:", err);
+          alert("Failed to remove viewer");
+        }
+      }
+    });
   };
 
-  const handleRevokeInvite = async (inviteId) => {
-    if (!confirm("Are you sure you want to revoke this pending invite?")) return;
-    try {
-      await deleteDoc(doc(db, "pendingInvites", inviteId));
-      setPendingInvites(prev => prev.filter(i => i.id !== inviteId));
-    } catch (err) {
-      console.error("Failed to revoke invite:", err);
-      alert("Failed to revoke invite");
-    }
+  const handleRevokeInvite = (inviteId) => {
+    setConfirmConfig({
+      title: "Revoke Invite",
+      message: "Are you sure you want to revoke this pending invite?",
+      confirmText: "Revoke",
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, "pendingInvites", inviteId));
+          setPendingInvites(prev => prev.filter(i => i.id !== inviteId));
+        } catch (err) {
+          console.error("Failed to revoke invite:", err);
+          alert("Failed to revoke invite");
+        }
+      }
+    });
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in-up">
-      <div className="bg-card w-full max-w-md rounded-2xl shadow-2xl border border-border flex flex-col max-h-[85vh]">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in-up"
+      onMouseDown={onClose}
+    >
+      <div 
+        className="bg-card w-full max-w-md rounded-2xl shadow-2xl border border-border flex flex-col max-h-[85vh]"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between p-6 border-b border-border">
           <h2 className="text-xl font-bold">Manage Access</h2>
           <button 
@@ -304,6 +325,12 @@ export default function InviteModal({ isOpen, onClose, nexus }) {
           )}
         </div>
       </div>
+
+      <ConfirmModal 
+        isOpen={!!confirmConfig} 
+        onClose={() => setConfirmConfig(null)} 
+        {...confirmConfig} 
+      />
     </div>
   );
 }

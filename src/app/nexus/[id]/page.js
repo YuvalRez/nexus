@@ -13,6 +13,7 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableNoteItem } from "@/components/SortableNoteItem";
 import InviteModal from "@/components/InviteModal";
+import ConfirmModal from "@/components/ConfirmModal";
 
 export default function NexusPage({ params }) {
   const unwrappedParams = use(params);
@@ -37,6 +38,7 @@ export default function NexusPage({ params }) {
   const [isSaving, setIsSaving] = useState(false);
   
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState(null);
   const fileInputRef = useRef(null);
   const scrollRef = useRef(null);
 
@@ -184,16 +186,21 @@ export default function NexusPage({ params }) {
     }
   };
 
-  const handleDeleteNote = async (noteId) => {
+  const handleDeleteNote = (noteId) => {
     if (!isOwner) return;
-    if (window.confirm("Delete this note?")) {
-      try {
-        await deleteDoc(doc(db, "notes", noteId));
-        if (activeNoteId === noteId) setActiveNoteId(null);
-      } catch (err) {
-        console.error("Failed to delete note:", err);
+    setConfirmConfig({
+      title: "Delete Note",
+      message: "Are you sure you want to delete this note? This cannot be undone.",
+      confirmText: "Delete Note",
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, "notes", noteId));
+          if (activeNoteId === noteId) setActiveNoteId(null);
+        } catch (err) {
+          console.error("Failed to delete note:", err);
+        }
       }
-    }
+    });
   };
 
   const startEditing = () => {
@@ -485,6 +492,12 @@ export default function NexusPage({ params }) {
         isOpen={isInviteModalOpen} 
         onClose={() => setIsInviteModalOpen(false)} 
         nexus={nexus} 
+      />
+
+      <ConfirmModal 
+        isOpen={!!confirmConfig} 
+        onClose={() => setConfirmConfig(null)} 
+        {...confirmConfig} 
       />
     </div>
   );
