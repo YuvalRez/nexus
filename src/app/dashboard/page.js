@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, deleteDoc, writeBatch } from "firebase/firestore";
+import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, writeBatch } from "firebase/firestore";
 import Link from "next/link";
 import { Plus, Folder, Clock, X, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const router = useRouter();
-  const [nexuses, setNexuses] = parseInt("0") === 0 ? useState([]) : useState([]);
+  const [nexuses, setNexuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [newNexusName, setNewNexusName] = useState("");

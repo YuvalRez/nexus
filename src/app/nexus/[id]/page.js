@@ -7,7 +7,7 @@ import { doc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimest
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
-import { FileText, Edit2, ArrowLeft, Users, File, Lock, FileUp, BookOpen, Save } from "lucide-react";
+import { Edit2, ArrowLeft, Users, File, Lock, FileUp, BookOpen, Save } from "lucide-react";
 import Link from "next/link";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -25,7 +25,12 @@ export default function NexusPage({ params }) {
   const [activeNoteId, setActiveNoteId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
   
+  const [isEditingNexusName, setIsEditingNexusName] = useState(false);
+  const [editNexusName, setEditNexusName] = useState("");
+  const [isSavingNexus, setIsSavingNexus] = useState(false);
+
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
@@ -86,12 +91,8 @@ export default function NexusPage({ params }) {
   const activeNote = notes.find(n => n.id === activeNoteId);
   const isOwner = nexus?.ownerId === user?.uid;
 
-  const handleFileUpload = async (e) => {
-    if (!isOwner) return;
-    
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
-
+  const uploadFiles = async (files) => {
+    if (!isOwner || files.length === 0) return;
     setLoading(true);
     let lastActiveId = null;
 
@@ -122,6 +123,27 @@ export default function NexusPage({ params }) {
       setLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  const handleFileUpload = (e) => {
+    uploadFiles(Array.from(e.target.files));
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    if (isOwner) setIsDraggingFile(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDraggingFile(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDraggingFile(false);
+    if (!isOwner) return;
+    uploadFiles(Array.from(e.dataTransfer.files));
   };
 
   const handleDragEnd = async (event) => {
@@ -183,6 +205,34 @@ export default function NexusPage({ params }) {
     }
   };
 
+  const startEditingNexus = () => {
+    if (!isOwner) return;
+    setEditNexusName(nexus?.name || "");
+    setIsEditingNexusName(true);
+  };
+
+  const saveNexusName = async () => {
+    if (!isOwner) return;
+    if (!editNexusName.trim()) {
+      setIsEditingNexusName(false);
+      return;
+    }
+    setIsSavingNexus(true);
+    try {
+      await updateDoc(doc(db, "nexuses", nexusId), {
+        name: editNexusName.trim(),
+        updatedAt: serverTimestamp()
+      });
+      setNexus(prev => ({ ...prev, name: editNexusName.trim() }));
+      setIsEditingNexusName(false);
+    } catch (err) {
+      console.error("Failed to update nexus name:", err);
+      alert("Failed to update name");
+    } finally {
+      setIsSavingNexus(false);
+    }
+  };
+
   if (loading && !nexus) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -210,18 +260,58 @@ export default function NexusPage({ params }) {
   return (
     <div className="flex h-screen bg-background overflow-hidden animate-fade-in-up">
       {/* Sidebar */}
-      <div className="w-72 bg-card border-r border-border flex flex-col flex-shrink-0 relative z-20 shadow-2xl">
+      <div 
+        className={`w-72 border-r flex flex-col flex-shrink-0 relative z-20 shadow-2xl transition-colors ${
+          isDraggingFile ? "bg-primary-500/10 border-primary-500" : "bg-card border-border"
+        }`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {isDraggingFile && (
+          <div className="absolute inset-0 z-50 bg-primary-500/10 backdrop-blur-sm border-2 border-primary-500 border-dashed flex items-center justify-center pointer-events-none">
+            <div className="bg-card p-4 rounded-xl shadow-2xl flex flex-col items-center">
+              <FileUp className="w-8 h-8 text-primary-500 mb-2 animate-bounce" />
+              <p className="font-bold text-primary-500">Drop files here</p>
+            </div>
+          </div>
+        )}
         <div className="p-4 border-b border-border">
           <Link href="/dashboard" className="flex items-center gap-2 text-sm text-foreground/60 hover:text-foreground mb-4 transition-colors">
             <ArrowLeft className="w-4 h-4" />
             Back to Dashboard
           </Link>
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="font-bold text-lg truncate pr-2">{nexus?.name}</h2>
-            {isOwner && (
+          <div className="flex items-center justify-between mb-1 gap-2">
+            {isEditingNexusName ? (
+              <input 
+                type="text"
+                autoFocus
+                value={editNexusName}
+                onChange={(e) => setEditNexusName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && saveNexusName()}
+                onBlur={saveNexusName}
+                disabled={isSavingNexus}
+                className="bg-background border border-border px-2 py-1 rounded font-bold text-lg focus:outline-none focus:ring-2 focus:ring-primary-500 w-full min-w-0"
+              />
+            ) : (
+              <div className="flex items-center gap-2 group flex-1 min-w-0">
+                <h2 className="font-bold text-lg truncate">{nexus?.name}</h2>
+                {isOwner && (
+                  <button
+                    onClick={startEditingNexus}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-foreground/40 hover:text-primary-500 transition-all rounded shrink-0"
+                    title="Edit Nexus Name"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+            
+            {isOwner && !isEditingNexusName && (
               <button 
                 onClick={() => setIsInviteModalOpen(true)}
-                className="p-1.5 text-foreground/50 hover:text-primary-500 hover:bg-primary-500/10 rounded-md transition-colors"
+                className="p-1.5 text-foreground/50 hover:text-primary-500 hover:bg-primary-500/10 rounded-md transition-colors shrink-0"
                 title="Invite Viewers"
               >
                 <Users className="w-4 h-4" />
