@@ -154,7 +154,10 @@ export default function NexusPage({ params }) {
 
   const handleDragLeave = (e) => {
     e.preventDefault();
-    setIsDraggingFile(false);
+    // Prevent flickering when dragging over child elements by checking if we actually left the window
+    if (!e.relatedTarget || e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
+      setIsDraggingFile(false);
+    }
   };
 
   const handleDrop = (e) => {
@@ -276,24 +279,23 @@ export default function NexusPage({ params }) {
   }
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden animate-fade-in-up">
-      {/* Sidebar */}
-      <div 
-        className={`w-72 border-r flex flex-col flex-shrink-0 relative z-20 shadow-2xl transition-colors ${
-          isDraggingFile ? "bg-primary-500/10 border-primary-500" : "bg-card border-border"
-        }`}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        {isDraggingFile && (
-          <div className="absolute inset-0 z-50 bg-primary-500/10 backdrop-blur-sm border-2 border-primary-500 border-dashed flex items-center justify-center pointer-events-none">
-            <div className="bg-card p-4 rounded-xl shadow-2xl flex flex-col items-center">
-              <FileUp className="w-8 h-8 text-primary-500 mb-2 animate-bounce" />
-              <p className="font-bold text-primary-500">Drop files here</p>
-            </div>
+    <div 
+      className="flex h-screen bg-background overflow-hidden animate-fade-in-up relative"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isDraggingFile && (
+        <div className="absolute inset-0 z-50 bg-primary-500/20 backdrop-blur-sm border-4 border-primary-500 border-dashed flex items-center justify-center pointer-events-none transition-all">
+          <div className="bg-card p-10 rounded-3xl shadow-2xl flex flex-col items-center transform scale-110">
+            <FileUp className="w-16 h-16 text-primary-500 mb-4 animate-bounce" />
+            <p className="font-bold text-2xl text-primary-500">Drop your Markdown files anywhere!</p>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Sidebar */}
+      <div className="w-72 bg-card border-r border-border flex flex-col flex-shrink-0 relative z-20 shadow-2xl">
         <div className="p-4 border-b border-border">
           <Link href="/dashboard" className="flex items-center gap-2 text-sm text-foreground/60 hover:text-foreground mb-4 transition-colors">
             <ArrowLeft className="w-4 h-4" />
@@ -445,33 +447,26 @@ export default function NexusPage({ params }) {
                   />
                 ) : (
                   <div className="prose prose-invert lg:prose-lg mx-auto">
-                    <ReactMarkdown 
-                      remarkPlugins={[remarkBreaks]}
-                      components={{
-                        a: ({ node, ...props }) => {
-                          if (props.href && props.href.startsWith("internal-link:")) {
-                            const targetTitle = decodeURIComponent(props.href.replace("internal-link:", ""));
-                            const targetNote = notes.find(n => n.title.toLowerCase() === targetTitle.toLowerCase());
-                            return (
-                              <button 
-                                onClick={() => {
-                                  if (targetNote) setActiveNoteId(targetNote.id);
-                                  else alert(`Note "${targetTitle}" not found in this Nexus!`);
-                                }}
-                                className="text-primary-400 hover:text-primary-300 transition-colors cursor-pointer border-b border-primary-500/30 hover:border-primary-400"
-                              >
-                                {props.children}
-                              </button>
-                            );
+                    <ReactMarkdown remarkPlugins={[remarkBreaks]}>
+                      {activeNote.content
+                        .replace(/\[\[([^|\]]+)(?:\|([^\]]+))?\]\]/g, (match, target, display) => {
+                          return display ? display : target;
+                        })
+                        .split('\n')
+                        .map(line => {
+                          const match = line.match(/^( +)/);
+                          if (match) {
+                            const spaces = match[1];
+                            const restOfLine = line.slice(spaces.length);
+                            const isListItem = /^([-*+]|\d+\.)\s/.test(restOfLine);
+                            if (!isListItem) {
+                              return '\u00A0'.repeat(spaces.length) + restOfLine;
+                            }
                           }
-                          return <a {...props} target="_blank" rel="noopener noreferrer" />;
-                        }
-                      }}
-                    >
-                      {activeNote.content.replace(/\[\[([^|\]]+)(?:\|([^\]]+))?\]\]/g, (match, target, display) => {
-                        const displayText = display ? display : target;
-                        return `[${displayText}](internal-link:${encodeURIComponent(target)})`;
-                      })}
+                          return line;
+                        })
+                        .join('\n')
+                      }
                     </ReactMarkdown>
                   </div>
                 )}
