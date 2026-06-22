@@ -38,6 +38,7 @@ export default function NexusPage({ params }) {
   
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const fileInputRef = useRef(null);
+  const scrollRef = useRef(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -88,6 +89,13 @@ export default function NexusPage({ params }) {
     return () => unsubscribe();
   }, [user, nexusId, error]);
 
+  // Reset scroll position when opening a different note
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+    }
+  }, [activeNoteId]);
+
   const activeNote = notes.find(n => n.id === activeNoteId);
   const isOwner = nexus?.ownerId === user?.uid;
 
@@ -103,15 +111,25 @@ export default function NexusPage({ params }) {
         const text = await file.text();
         const title = file.name.replace('.md', '');
         
-        const docRef = await addDoc(collection(db, "notes"), {
-          nexusId,
-          title,
-          content: text,
-          order: notes.length,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        lastActiveId = docRef.id;
+        const existingNote = notes.find(n => n.title.toLowerCase() === title.toLowerCase());
+
+        if (existingNote) {
+          await updateDoc(doc(db, "notes", existingNote.id), {
+            content: text,
+            updatedAt: serverTimestamp()
+          });
+          lastActiveId = existingNote.id;
+        } else {
+          const docRef = await addDoc(collection(db, "notes"), {
+            nexusId,
+            title,
+            content: text,
+            order: notes.length, // Could use existing max order + 1, but notes.length works roughly
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          lastActiveId = docRef.id;
+        }
       }
       
       await updateDoc(doc(db, "nexuses", nexusId), { updatedAt: serverTimestamp() });
@@ -416,7 +434,7 @@ export default function NexusPage({ params }) {
               )}
             </header>
             
-            <div className="flex-1 overflow-y-auto">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto">
               <div className="max-w-4xl mx-auto p-8 md:p-12">
                 {isEditing ? (
                   <textarea
@@ -427,8 +445,33 @@ export default function NexusPage({ params }) {
                   />
                 ) : (
                   <div className="prose prose-invert lg:prose-lg mx-auto">
-                    <ReactMarkdown remarkPlugins={[remarkBreaks]}>
-                      {activeNote.content}
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkBreaks]}
+                      components={{
+                        a: ({ node, ...props }) => {
+                          if (props.href && props.href.startsWith("internal-link:")) {
+                            const targetTitle = decodeURIComponent(props.href.replace("internal-link:", ""));
+                            const targetNote = notes.find(n => n.title.toLowerCase() === targetTitle.toLowerCase());
+                            return (
+                              <button 
+                                onClick={() => {
+                                  if (targetNote) setActiveNoteId(targetNote.id);
+                                  else alert(`Note "${targetTitle}" not found in this Nexus!`);
+                                }}
+                                className="text-primary-400 hover:text-primary-300 transition-colors cursor-pointer border-b border-primary-500/30 hover:border-primary-400"
+                              >
+                                {props.children}
+                              </button>
+                            );
+                          }
+                          return <a {...props} target="_blank" rel="noopener noreferrer" />;
+                        }
+                      }}
+                    >
+                      {activeNote.content.replace(/\[\[([^|\]]+)(?:\|([^\]]+))?\]\]/g, (match, target, display) => {
+                        const displayText = display ? display : target;
+                        return `[${displayText}](internal-link:${encodeURIComponent(target)})`;
+                      })}
                     </ReactMarkdown>
                   </div>
                 )}

@@ -78,6 +78,9 @@
   color: rgba(255, 255, 255, 0.9);
   max-width: none;
 }
+.prose p, .prose li, .prose span {
+  white-space: pre-wrap;
+}
 .prose h1, .prose h2, .prose h3, .prose h4 {
   color: white;
   font-weight: 600;
