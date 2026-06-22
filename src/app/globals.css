@@ -232,3 +232,34 @@
   margin: 0 !important;
   display: inline !important;
 }
+
+/* Collaborative Cursor Styles */
+.collaborative-cursor {
+  position: relative;
+  border-left: 2px solid var(--color-primary-500);
+  margin-left: -1px;
+  margin-right: -1px;
+  display: inline-block;
+  height: 1.2em;
+  vertical-align: text-bottom;
+}
+.collaborative-cursor::after {
+  content: attr(data-user);
+  position: absolute;
+  top: -1.4em;
+  left: -2px;
+  background-color: var(--color-primary-500);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: bold;
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+  border-bottom-left-radius: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  opacity: 0.8;
+  z-index: 50;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+

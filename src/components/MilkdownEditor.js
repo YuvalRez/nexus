@@ -192,14 +192,76 @@ function buildDecorations(doc, selection, isFocusedView) {
   return DecorationSet.create(doc, decorations);
 }
 
-const MilkdownEditorContent = ({ initialContent, onChange, isEditable }) => {
+import { replaceAll } from '@milkdown/utils';
+import { editorViewCtx } from '@milkdown/core';
+
+const remoteCursorKey = new PluginKey('remoteCursor');
+
+const remoteCursorMilkdownPlugin = $prose(() => new Plugin({
+  key: remoteCursorKey,
+  state: {
+    init() { return DecorationSet.empty; },
+    apply(tr, oldSet, oldState, newState) {
+      const cursorData = tr.getMeta(remoteCursorKey);
+      if (cursorData === undefined) {
+        return oldSet.map(tr.mapping, tr.doc);
+      }
+      if (cursorData === null) {
+        return DecorationSet.empty;
+      }
+      
+      const { from, user } = cursorData;
+      // create a widget
+      const widget = document.createElement('span');
+      widget.className = 'collaborative-cursor';
+      widget.setAttribute('data-user', user || 'Owner');
+      
+      // Ensure the position is valid within the document
+      const safeFrom = Math.min(from, newState.doc.content.size);
+      
+      const deco = Decoration.widget(safeFrom, widget, { side: 1 });
+      return DecorationSet.create(newState.doc, [deco]);
+    }
+  },
+  props: {
+    decorations(state) {
+      return this.getState(state);
+    }
+  }
+}));
+
+const selectionBroadcastKey = new PluginKey('selectionBroadcast');
+let onSelectionChangeRef = null;
+
+const selectionBroadcastPlugin = $prose(() => new Plugin({
+  key: selectionBroadcastKey,
+  view() {
+    return {
+      update(view, prevState) {
+        if (prevState && !prevState.selection.eq(view.state.selection)) {
+          if (onSelectionChangeRef) {
+            onSelectionChangeRef({
+              from: view.state.selection.from,
+              to: view.state.selection.to
+            });
+          }
+        }
+      }
+    };
+  }
+}));
+
+const MilkdownEditorContent = ({ initialContent, onChange, isEditable, onSelectionChange, remoteCursor }) => {
+  useEffect(() => {
+    onSelectionChangeRef = onSelectionChange;
+  }, [onSelectionChange]);
+
   const { get, editor } = useEditor((root) => {
     return Editor.make()
       .config((ctx) => {
         ctx.set(rootCtx, root);
         ctx.set(defaultValueCtx, initialContent);
         
-        // Make sure it's read-only if isEditable is false, and disable native spellcheck
         ctx.set(editorViewOptionsCtx, {
           editable: () => isEditable,
           attributes: { spellcheck: 'false' }
@@ -216,19 +278,40 @@ const MilkdownEditorContent = ({ initialContent, onChange, isEditable }) => {
       .use(history)
       .use(listener)
       .use(tabKeymapPlugin)
-      // Inject our custom ProseMirror plugin for Wiki-Links properly wrapped in $prose
-      .use(wikiLinkMilkdownPlugin);
-  }, [isEditable]); // ONLY rebuild if isEditable changes! initialContent must not trigger rebuild
+      .use(wikiLinkMilkdownPlugin)
+      .use(remoteCursorMilkdownPlugin)
+      .use(selectionBroadcastPlugin);
+  }, [isEditable]); // Rebuild if isEditable changes
+
+  // Inject remote cursor into the engine dynamically without rebuilding
+  useEffect(() => {
+    const editorInstance = get();
+    if (editorInstance && editorInstance.action) {
+      editorInstance.action((ctx) => {
+        try {
+          const view = ctx.get(editorViewCtx);
+          view.dispatch(view.state.tr.setMeta(remoteCursorKey, remoteCursor || null));
+        } catch (e) {
+          // View might not be ready
+        }
+      });
+    }
+  }, [remoteCursor, get]);
 
   return <Milkdown />;
 };
 
-export default function MilkdownEditor({ initialContent, onChange, isEditable = true }) {
-  // Use a wrapper div with Tailwind prose to maintain our typography
+export default function MilkdownEditor({ initialContent, onChange, isEditable = true, onSelectionChange, remoteCursor }) {
   return (
     <div className="prose prose-invert max-w-none w-full outline-none focus:outline-none min-h-[500px] flex-1 flex flex-col milkdown-container">
       <MilkdownProvider>
-        <MilkdownEditorContent initialContent={initialContent} onChange={onChange} isEditable={isEditable} />
+        <MilkdownEditorContent 
+          initialContent={initialContent} 
+          onChange={onChange} 
+          isEditable={isEditable} 
+          onSelectionChange={onSelectionChange}
+          remoteCursor={remoteCursor}
+        />
       </MilkdownProvider>
     </div>
   );

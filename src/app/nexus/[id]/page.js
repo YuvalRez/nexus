@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, use } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, getDocs, collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { doc, getDoc, getDocs, collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, updateDoc, arrayUnion, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
@@ -41,6 +41,9 @@ export default function NexusPage({ params }) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  
+  const [remoteCursor, setRemoteCursor] = useState(null);
+  const cursorUpdateTimeoutRef = useRef(null);
   
   const [galleryWidth, setGalleryWidth] = useState(320);
   const [isGalleryCollapsed, setIsGalleryCollapsed] = useState(false);
@@ -154,7 +157,41 @@ export default function NexusPage({ params }) {
   }, [zoomedImageIndex]);
 
   const activeNote = notes.find(n => n.id === activeNoteId);
-  const isOwner = nexus?.ownerId === user?.uid;
+  const isOwner = user && nexus && nexus.ownerId === user.uid;
+
+  // Listen to remote cursor updates (Viewers only)
+  useEffect(() => {
+    if (!activeNoteId || isOwner) return;
+    
+    const unsubscribe = onSnapshot(doc(db, "cursors", activeNoteId), (snapshot) => {
+      if (snapshot.exists()) {
+        setRemoteCursor(snapshot.data());
+      } else {
+        setRemoteCursor(null);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [activeNoteId, isOwner]);
+
+  // Broadcast cursor updates (Owner only)
+  const handleSelectionChange = (selection) => {
+    if (!isOwner || !activeNoteId) return;
+    
+    // Throttle to 1 write per second to respect Firebase quotas
+    if (cursorUpdateTimeoutRef.current) return;
+    
+    cursorUpdateTimeoutRef.current = setTimeout(() => {
+      setDoc(doc(db, "cursors", activeNoteId), {
+        from: selection.from,
+        to: selection.to,
+        user: user.displayName || user.email?.split('@')[0] || 'Owner',
+        updatedAt: serverTimestamp()
+      }, { merge: true }).catch(console.error);
+      
+      cursorUpdateTimeoutRef.current = null;
+    }, 1000);
+  };
 
   const checkAndDeleteOrphanedImages = async (urlsToCheck) => {
     if (!urlsToCheck || urlsToCheck.length === 0) return;
@@ -642,6 +679,8 @@ export default function NexusPage({ params }) {
                     initialContent={activeNote.content || ""} 
                     onChange={saveContent} 
                     isEditable={isOwner}
+                    onSelectionChange={handleSelectionChange}
+                    remoteCursor={remoteCursor}
                   />
                 </div>
               </div>
