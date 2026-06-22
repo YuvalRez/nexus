@@ -35,8 +35,6 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
-    setError("");
-    setLoading(true);
     try {
       await loginWithGoogle();
       router.push("/dashboard");
@@ -47,8 +45,6 @@ export default function LoginPage() {
         setError(err.message || "Failed to sign in with Google.");
         console.error(err);
       }
-    } finally {
-      setLoading(false);
     }
   };
 

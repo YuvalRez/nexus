@@ -5,8 +5,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   signOut,
   updateProfile
 } from "firebase/auth";
@@ -20,11 +19,6 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Explicitly handle the redirect result to finalize the login
-    getRedirectResult(auth).catch((error) => {
-      console.error("Failed to get redirect result:", error);
-    });
-
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         // Ensure user is in Firestore
@@ -83,7 +77,7 @@ export function AuthProvider({ children }) {
   };
 
   const loginWithGoogle = () => {
-    return signInWithRedirect(auth, googleProvider);
+    return signInWithPopup(auth, googleProvider);
   };
 
   const logout = () => {
