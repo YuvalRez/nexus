@@ -72,7 +72,6 @@ export default function DashboardPage() {
       });
       setIsCreating(false);
       setNewNexusName("");
-      router.push(`/nexus/${docRef.id}`);
     } catch (err) {
       console.error("Failed to create nexus:", err);
     }

@@ -146,7 +146,9 @@ export default function NexusPage({ params }) {
 
   const handleDragOver = (e) => {
     e.preventDefault();
-    if (isOwner) setIsDraggingFile(true);
+    if (isOwner && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes("Files")) {
+      setIsDraggingFile(true);
+    }
   };
 
   const handleDragLeave = (e) => {
