@@ -77,10 +77,11 @@
 .prose {
   color: rgba(255, 255, 255, 0.9);
   max-width: none;
+  line-height: 1.6;
+}
 .prose p {
-  white-space: pre-wrap;
-  margin-top: 0.5em;
-  margin-bottom: 0.5em;
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
 }
 .prose ul, .prose ol {
   margin-top: 0.5em;
@@ -94,6 +95,7 @@
   margin-top: 0;
   margin-bottom: 0;
 }
+.prose h1, .prose h2, .prose h3, .prose h4 {
   color: white;
   font-weight: 600;
 }

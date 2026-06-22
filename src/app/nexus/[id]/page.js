@@ -454,13 +454,17 @@ export default function NexusPage({ params }) {
                         })
                         .split('\n')
                         .map(line => {
-                          const match = line.match(/^( +)/);
+                          const match = line.match(/^([ \t]+)/);
                           if (match) {
-                            const spaces = match[1];
-                            const restOfLine = line.slice(spaces.length);
+                            const indentChars = match[1];
+                            const restOfLine = line.slice(indentChars.length);
                             const isListItem = /^([-*+]|\d+\.)\s/.test(restOfLine);
                             if (!isListItem) {
-                              return '\u00A0'.repeat(spaces.length) + restOfLine;
+                              const visualIndent = indentChars.replace(/\t/g, '\u00A0\u00A0\u00A0\u00A0').replace(/ /g, '\u00A0');
+                              return visualIndent + restOfLine;
+                            } else {
+                              const parserIndent = indentChars.replace(/\t/g, '    ');
+                              return parserIndent + restOfLine;
                             }
                           }
                           return line;
