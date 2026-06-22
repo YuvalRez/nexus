@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Custom Scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Markdown prose overrides for dark mode */
+.prose {
+  @apply text-foreground/90 max-w-none;
+}
+.prose h1, .prose h2, .prose h3, .prose h4 {
+  @apply text-foreground font-semibold;
+}
+.prose a {
+  @apply text-primary-400 hover:text-primary-300 transition-colors;
+}
+.prose code {
+  @apply bg-foreground/10 px-1.5 py-0.5 rounded-md text-primary-300 font-mono text-sm before:content-none after:content-none;
+}
+.prose pre {
+  @apply bg-foreground/5 border border-border rounded-xl p-4 overflow-x-auto;
+}
+.prose pre code {
+  @apply bg-transparent p-0 text-foreground/90;
+}
+.prose blockquote {
+  @apply border-l-4 border-primary-500/50 bg-primary-500/5 px-4 py-1 italic text-foreground/70 rounded-r-lg;
+}
+.prose ul {
+  @apply list-disc list-inside space-y-1;
+}
+.prose ol {
+  @apply list-decimal list-inside space-y-1;
+}
+.prose hr {
+  @apply border-border my-8;
+}
+.prose table {
+  @apply w-full border-collapse border border-border rounded-lg overflow-hidden;
+}
+.prose th {
+  @apply bg-foreground/5 border border-border px-4 py-2 text-left font-medium;
+}
+.prose td {
+  @apply border border-border px-4 py-2;
+}
+.prose img {
+  @apply rounded-xl border border-border;
+}

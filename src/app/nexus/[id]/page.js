@@ -1,0 +1,364 @@
+"use client";
+
+import { useEffect, useState, useRef, use } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { db } from "@/lib/firebase";
+import { doc, getDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, updateDoc } from "firebase/firestore";
+import { useRouter } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
+import { FileText, Edit2, ArrowLeft, Users, File, Lock, FileUp, BookOpen, Save } from "lucide-react";
+import Link from "next/link";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableNoteItem } from "@/components/SortableNoteItem";
+import InviteModal from "@/components/InviteModal";
+
+export default function NexusPage({ params }) {
+  const unwrappedParams = use(params);
+  const nexusId = unwrappedParams.id;
+  const { user } = useAuth();
+  const router = useRouter();
+  
+  const [nexus, setNexus] = useState(null);
+  const [notes, setNotes] = useState([]);
+  const [activeNoteId, setActiveNoteId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  useEffect(() => {
+    if (!user || !nexusId) return;
+
+    const fetchNexus = async () => {
+      try {
+        const docRef = doc(db, "nexuses", nexusId);
+        const docSnap = await getDoc(docRef);
+        
+        if (!docSnap.exists() || !docSnap.data().memberIds.includes(user.uid)) {
+          setError("Nexus not found or you don't have access.");
+          setLoading(false);
+          return;
+        }
+        
+        setNexus({ id: docSnap.id, ...docSnap.data() });
+      } catch (err) {
+        console.error("Error fetching nexus:", err);
+        setError("Failed to load Nexus.");
+      }
+    };
+
+    fetchNexus();
+  }, [user, nexusId]);
+
+  useEffect(() => {
+    if (!user || !nexusId || error) return;
+
+    const q = query(collection(db, "notes"), where("nexusId", "==", nexusId));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const loadedNotes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      loadedNotes.sort((a, b) => {
+        if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+        return (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0);
+      });
+      
+      setNotes(loadedNotes);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user, nexusId, error]);
+
+  const activeNote = notes.find(n => n.id === activeNoteId);
+  const isOwner = nexus?.ownerId === user?.uid;
+
+  const handleFileUpload = async (e) => {
+    if (!isOwner) return;
+    
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    setLoading(true);
+    let lastActiveId = null;
+
+    try {
+      for (const file of files) {
+        if (!file.name.endsWith('.md')) continue;
+
+        const text = await file.text();
+        const title = file.name.replace('.md', '');
+        
+        const docRef = await addDoc(collection(db, "notes"), {
+          nexusId,
+          title,
+          content: text,
+          order: notes.length,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        lastActiveId = docRef.id;
+      }
+      
+      await updateDoc(doc(db, "nexuses", nexusId), { updatedAt: serverTimestamp() });
+      if (lastActiveId) setActiveNoteId(lastActiveId);
+    } catch (err) {
+      console.error("Error uploading notes:", err);
+      alert("Failed to upload notes.");
+    } finally {
+      setLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleDragEnd = async (event) => {
+    if (!isOwner) return;
+    
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = notes.findIndex((n) => n.id === active.id);
+    const newIndex = notes.findIndex((n) => n.id === over.id);
+    
+    const newNotes = arrayMove(notes, oldIndex, newIndex);
+    setNotes(newNotes);
+
+    try {
+      const promises = newNotes.map((note, index) => 
+        updateDoc(doc(db, "notes", note.id), { order: index })
+      );
+      await Promise.all(promises);
+    } catch (err) {
+      console.error("Failed to reorder notes:", err);
+    }
+  };
+
+  const handleDeleteNote = async (noteId) => {
+    if (!isOwner) return;
+    if (window.confirm("Delete this note?")) {
+      try {
+        await deleteDoc(doc(db, "notes", noteId));
+        if (activeNoteId === noteId) setActiveNoteId(null);
+      } catch (err) {
+        console.error("Failed to delete note:", err);
+      }
+    }
+  };
+
+  const startEditing = () => {
+    if (!isOwner || !activeNote) return;
+    setEditTitle(activeNote.title);
+    setEditContent(activeNote.content);
+    setIsEditing(true);
+  };
+
+  const saveNote = async () => {
+    if (!isOwner || !activeNote) return;
+    setIsSaving(true);
+    try {
+      await updateDoc(doc(db, "notes", activeNote.id), {
+        title: editTitle,
+        content: editContent,
+        updatedAt: serverTimestamp()
+      });
+      setIsEditing(false);
+    } catch (err) {
+      console.error("Failed to save note:", err);
+      alert("Failed to save note");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (loading && !nexus) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-8 h-8" />
+          </div>
+          <h1 className="text-2xl font-bold mb-2">{error}</h1>
+          <Link href="/dashboard" className="text-primary-500 hover:underline">
+            Return to Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-screen bg-background overflow-hidden animate-fade-in-up">
+      {/* Sidebar */}
+      <div className="w-72 bg-card border-r border-border flex flex-col flex-shrink-0 relative z-20 shadow-2xl">
+        <div className="p-4 border-b border-border">
+          <Link href="/dashboard" className="flex items-center gap-2 text-sm text-foreground/60 hover:text-foreground mb-4 transition-colors">
+            <ArrowLeft className="w-4 h-4" />
+            Back to Dashboard
+          </Link>
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="font-bold text-lg truncate pr-2">{nexus?.name}</h2>
+            {isOwner && (
+              <button 
+                onClick={() => setIsInviteModalOpen(true)}
+                className="p-1.5 text-foreground/50 hover:text-primary-500 hover:bg-primary-500/10 rounded-md transition-colors"
+                title="Invite Viewers"
+              >
+                <Users className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-foreground/50 font-medium">
+            {isOwner ? "Owner (Editor)" : "Viewer"}
+          </p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3 space-y-1">
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={notes} strategy={verticalListSortingStrategy}>
+              {notes.map((note) => (
+                <SortableNoteItem
+                  key={note.id}
+                  note={note}
+                  isOwner={isOwner}
+                  isSelected={activeNoteId === note.id}
+                  onSelect={setActiveNoteId}
+                  onDelete={handleDeleteNote}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+          
+          {notes.length === 0 && (
+            <div className="text-center py-8 px-4 border-2 border-dashed border-border rounded-xl mt-4">
+              <File className="w-8 h-8 text-foreground/20 mx-auto mb-2" />
+              <p className="text-sm text-foreground/50">No notes yet.</p>
+            </div>
+          )}
+        </div>
+
+        {isOwner && (
+          <div className="p-4 border-t border-border bg-card">
+            <input
+              type="file"
+              accept=".md"
+              multiple
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary-600/10 text-primary-500 border border-primary-500/20 font-medium rounded-xl hover:bg-primary-600 hover:text-white hover:border-primary-600 transition-all"
+            >
+              <FileUp className="w-4 h-4" />
+              Upload Markdown
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col bg-background relative z-10 overflow-hidden">
+        {activeNote ? (
+          <>
+            <header className="h-16 border-b border-border flex items-center justify-between px-6 bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+              {isEditing ? (
+                <input 
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="bg-background border border-border px-3 py-1.5 rounded-lg font-bold text-lg focus:outline-none focus:ring-2 focus:ring-primary-500 w-1/2"
+                />
+              ) : (
+                <h1 className="font-bold text-xl truncate">{activeNote.title}</h1>
+              )}
+              
+              {isOwner && (
+                <div>
+                  {isEditing ? (
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => setIsEditing(false)}
+                        className="px-4 py-2 text-sm hover:bg-foreground/5 rounded-lg transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        onClick={saveNote}
+                        disabled={isSaving}
+                        className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors disabled:opacity-50"
+                      >
+                        <Save className="w-4 h-4" />
+                        {isSaving ? "Saving..." : "Save Note"}
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={startEditing}
+                      className="flex items-center gap-2 px-4 py-2 bg-foreground/5 hover:bg-foreground/10 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      Edit Note
+                    </button>
+                  )}
+                </div>
+              )}
+            </header>
+            
+            <div className="flex-1 overflow-y-auto">
+              <div className="max-w-4xl mx-auto p-8 md:p-12">
+                {isEditing ? (
+                  <textarea
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    className="w-full h-[70vh] bg-background border border-border rounded-xl p-6 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none shadow-inner"
+                    placeholder="Write your markdown here..."
+                  />
+                ) : (
+                  <div className="prose prose-invert lg:prose-lg mx-auto">
+                    <ReactMarkdown remarkPlugins={[remarkBreaks]}>
+                      {activeNote.content}
+                    </ReactMarkdown>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-foreground/40 p-8">
+            <BookOpen className="w-16 h-16 mb-4 opacity-50" />
+            <p className="text-lg font-medium text-foreground/60">Select a note from the sidebar</p>
+            {isOwner && <p className="text-sm mt-2">or upload new markdown files to get started.</p>}
+          </div>
+        )}
+      </div>
+
+      <InviteModal 
+        isOpen={isInviteModalOpen} 
+        onClose={() => setIsInviteModalOpen(false)} 
+        nexusId={nexusId} 
+      />
+    </div>
+  );
+}
