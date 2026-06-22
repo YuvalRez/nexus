@@ -26,9 +26,9 @@ export function SortableImageItem({ url, idx, isOwner, setZoomedImageIndex, onRe
     <div 
       ref={setNodeRef}
       style={style}
-      {...attributes} 
-      {...listeners}
-      className={`relative group rounded-xl overflow-hidden border border-border shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md bg-black/5 ${isDragging ? '' : 'transition-all'}`}
+      {...(isOwner ? attributes : {})} 
+      {...(isOwner ? listeners : {})}
+      className={`relative group rounded-xl overflow-hidden border border-border shadow-sm hover:shadow-md bg-black/5 ${isOwner ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? '' : 'transition-all'}`}
     >
       {/* The Image */}
       <img 

@@ -51,6 +51,7 @@ export default function NexusPage({ params }) {
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
   const scrollRef = useRef(null);
+  const thumbnailContainerRef = useRef(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -141,6 +142,16 @@ export default function NexusPage({ params }) {
       window.removeEventListener("mouseup", handleMouseUp);
     };
   }, [isResizing]);
+
+  // Scroll thumbnail into view when changed via arrows
+  useEffect(() => {
+    if (thumbnailContainerRef.current && zoomedImageIndex !== null) {
+      const activeThumb = thumbnailContainerRef.current.children[zoomedImageIndex];
+      if (activeThumb) {
+        activeThumb.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+      }
+    }
+  }, [zoomedImageIndex]);
 
   const activeNote = notes.find(n => n.id === activeNoteId);
   const isOwner = nexus?.ownerId === user?.uid;
@@ -618,7 +629,7 @@ export default function NexusPage({ params }) {
                     className="p-1.5 hover:bg-foreground/10 rounded-lg text-foreground/60 hover:text-foreground transition-all"
                     title={isGalleryCollapsed ? "Show Gallery" : "Hide Gallery"}
                   >
-                    {isGalleryCollapsed ? <PanelRightClose className="w-5 h-5" /> : <PanelRightOpen className="w-5 h-5" />}
+                    {isGalleryCollapsed ? <PanelRightOpen className="w-5 h-5" /> : <PanelRightClose className="w-5 h-5" />}
                   </button>
                 </div>
               </header>
@@ -798,6 +809,32 @@ export default function NexusPage({ params }) {
             alt="Zoomed Fullscreen" 
             className="max-w-full max-h-full object-contain pointer-events-none"
           />
+
+          {/* Thumbnail Strip */}
+          <div 
+            ref={thumbnailContainerRef}
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 max-w-[780px] overflow-x-auto p-4 bg-black/40 backdrop-blur-md rounded-2xl z-50"
+            onClick={(e) => e.stopPropagation()}
+            onWheel={(e) => {
+              if (e.deltaY !== 0) {
+                e.stopPropagation();
+                e.currentTarget.scrollLeft += e.deltaY;
+              }
+            }}
+          >
+            {activeNote.images.map((imgUrl, i) => (
+              <img 
+                key={i}
+                src={imgUrl}
+                alt={`Thumbnail ${i}`}
+                className={`w-16 h-16 object-cover rounded-xl cursor-pointer shrink-0 transition-all duration-300 ${i === zoomedImageIndex ? 'border-2 border-primary-500 scale-110 opacity-100 shadow-lg' : 'opacity-50 hover:opacity-100 hover:scale-105'}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setZoomedImageIndex(i);
+                }}
+              />
+            ))}
+          </div>
 
           {/* Close Button */}
           <button 
