@@ -8,6 +8,9 @@ import Link from "next/link";
 import { Plus, Folder, Clock, X, Trash2, LogOut, Check, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 import ConfirmModal from "@/components/ConfirmModal";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, rectSortingStrategy } from '@dnd-kit/sortable';
+import { SortableNexusItem } from "@/components/SortableNexusItem";
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
@@ -19,6 +22,33 @@ export default function DashboardPage() {
   const [newNexusName, setNewNexusName] = useState("");
   const [confirmConfig, setConfirmConfig] = useState(null);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = nexuses.findIndex((n) => n.id === active.id);
+      const newIndex = nexuses.findIndex((n) => n.id === over.id);
+      
+      const newNexuses = arrayMove(nexuses, oldIndex, newIndex);
+      setNexuses(newNexuses);
+      
+      try {
+        const batchUpdate = newNexuses.map((nexus, index) => 
+          updateDoc(doc(db, "nexuses", nexus.id), { 
+            [`userOrders.${user.uid}`]: index 
+          })
+        );
+        await Promise.all(batchUpdate);
+      } catch (err) {
+        console.error("Error reordering nexuses:", err);
+      }
+    }
+  };
+
   useEffect(() => {
     if (!user) return;
 
@@ -26,7 +56,15 @@ export default function DashboardPage() {
     const nexusesQ = query(collection(db, "nexuses"), where("memberIds", "array-contains", user.uid));
     const unsubscribeNexuses = onSnapshot(nexusesQ, (snap) => {
       const loaded = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setNexuses(loaded.sort((a, b) => (b.updatedAt?.toMillis() || 0) - (a.updatedAt?.toMillis() || 0)));
+      loaded.sort((a, b) => {
+        const orderA = a.userOrders?.[user.uid];
+        const orderB = b.userOrders?.[user.uid];
+        if (orderA !== undefined && orderB !== undefined) return orderA - orderB;
+        if (orderA !== undefined) return -1;
+        if (orderB !== undefined) return 1;
+        return (b.updatedAt?.toMillis() || 0) - (a.updatedAt?.toMillis() || 0);
+      });
+      setNexuses(loaded);
       setLoading(false);
     });
 
@@ -274,50 +312,26 @@ export default function DashboardPage() {
               </button>
             </div>
           ) : (
-            nexuses.map((nexus) => (
-              <Link
-                href={`/nexus/${nexus.id}`}
-                key={nexus.id}
-                className="group bg-card border border-border p-6 rounded-2xl hover:border-primary-500/50 hover:shadow-xl hover:shadow-primary-500/5 transition-all block relative"
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={nexuses}
+                strategy={rectSortingStrategy}
               >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-10 h-10 bg-primary-500/10 rounded-xl flex items-center justify-center text-primary-500">
-                    <Folder className="w-5 h-5" />
-                  </div>
-                  {nexus.ownerId === user?.uid ? (
-                    <button
-                      onClick={(e) => handleDeleteNexus(nexus.id, e)}
-                      className="p-2 text-foreground/30 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                      title="Delete Nexus"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={(e) => handleLeaveNexus(nexus.id, e)}
-                      className="p-2 text-foreground/30 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                      title="Leave Nexus"
-                    >
-                      <LogOut className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-                <h3 className="text-xl font-semibold mb-2 group-hover:text-primary-400 transition-colors">
-                  {nexus.name}
-                </h3>
-                <div className="flex items-center gap-4 text-sm text-foreground/50">
-                  <span className="flex items-center gap-1.5">
-                    <Clock className="w-4 h-4" />
-                    {nexus.updatedAt ? new Date(nexus.updatedAt.toMillis()).toLocaleDateString() : 'Just now'}
-                  </span>
-                  {nexus.ownerId === user?.uid ? (
-                    <span className="px-2 py-0.5 bg-primary-500/10 text-primary-500 rounded text-xs font-medium">Owner</span>
-                  ) : (
-                    <span className="px-2 py-0.5 bg-foreground/10 rounded text-xs font-medium">Shared</span>
-                  )}
-                </div>
-              </Link>
-            ))
+                {nexuses.map((nexus) => (
+                  <SortableNexusItem
+                    key={nexus.id}
+                    nexus={nexus}
+                    user={user}
+                    handleDeleteNexus={handleDeleteNexus}
+                    handleLeaveNexus={handleLeaveNexus}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           )}
         </div>
       </main>

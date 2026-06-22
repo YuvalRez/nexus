@@ -731,7 +731,10 @@ export default function NexusPage({ params }) {
                 </SortableContext>
               </DndContext>
             ) : (
-              <div className="text-center py-10 px-4 border-2 border-dashed border-border rounded-xl">
+              <div 
+                style={{ flex: '0 1 200px' }} 
+                className="text-center aspect-square flex items-center justify-center px-4 border-2 border-dashed border-border rounded-xl"
+              >
                 <p className="text-sm text-foreground/50">No images yet.</p>
               </div>
             )}
