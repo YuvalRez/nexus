@@ -34,27 +34,7 @@ export function AuthProvider({ children }) {
           });
         }
         
-        // Resolve pending invites
-        if (currentUser.email) {
-          try {
-            const invitesQ = query(collection(db, "pendingInvites"), where("email", "==", currentUser.email.toLowerCase()));
-            const invitesSnap = await getDocs(invitesQ);
-            
-            for (const inviteDoc of invitesSnap.docs) {
-              const inviteData = inviteDoc.data();
-              const nexusRef = doc(db, "nexuses", inviteData.nexusId);
-              
-              // Only update if nexus exists
-              await updateDoc(nexusRef, {
-                memberIds: arrayUnion(currentUser.uid)
-              }).catch(e => console.error("Nexus not found for invite", e));
-              
-              await deleteDoc(inviteDoc.ref);
-            }
-          } catch (err) {
-            console.error("Failed to resolve pending invites", err);
-          }
-        }
+
         
         setUser(currentUser);
       } else {
