@@ -37,7 +37,8 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     try {
       await loginWithGoogle();
-      router.push("/dashboard");
+      // The page will redirect to Google.
+      // Once authenticated, they will return here, and the useEffect will push them to /dashboard.
     } catch (err) {
       if (err.code === 'auth/popup-closed-by-user') {
         setError("Sign-in cancelled. Please try again.");

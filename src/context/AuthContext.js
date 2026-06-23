@@ -57,16 +57,9 @@ export function AuthProvider({ children }) {
     return userCredential;
   };
 
-  const loginWithGoogle = async () => {
-    try {
-      return await signInWithPopup(auth, googleProvider);
-    } catch (error) {
-      if (error.code === 'auth/popup-blocked') {
-        console.warn('Popup blocked, falling back to redirect...');
-        return signInWithRedirect(auth, googleProvider);
-      }
-      throw error;
-    }
+  const loginWithGoogle = () => {
+    // Strictly use redirect to permanently bypass all browser popup blockers
+    return signInWithRedirect(auth, googleProvider);
   };
 
   const logout = () => {
