@@ -6,6 +6,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   updateProfile
 } from "firebase/auth";
@@ -56,8 +57,16 @@ export function AuthProvider({ children }) {
     return userCredential;
   };
 
-  const loginWithGoogle = () => {
-    return signInWithPopup(auth, googleProvider);
+  const loginWithGoogle = async () => {
+    try {
+      return await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      if (error.code === 'auth/popup-blocked') {
+        console.warn('Popup blocked, falling back to redirect...');
+        return signInWithRedirect(auth, googleProvider);
+      }
+      throw error;
+    }
   };
 
   const logout = () => {
