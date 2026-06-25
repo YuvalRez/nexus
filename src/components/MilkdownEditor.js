@@ -11,7 +11,8 @@ import { Plugin, PluginKey } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { keymap } from 'prosemirror-keymap';
 import { sinkListItem, liftListItem } from 'prosemirror-schema-list';
-import { $prose } from '@milkdown/utils';
+import { $prose, $remark } from '@milkdown/utils';
+import remarkBreaks from 'remark-breaks';
 import '@milkdown/theme-nord/style.css'; // Minimal default styling
 
 const wikiLinkKey = new PluginKey('wikiLinkHideShow');
@@ -192,6 +193,8 @@ function buildDecorations(doc, selection, isFocusedView) {
   return DecorationSet.create(doc, decorations);
 }
 
+const breaksPlugin = $remark('remarkBreaks', () => remarkBreaks);
+
 import { replaceAll } from '@milkdown/utils';
 import { editorViewCtx } from '@milkdown/core';
 
@@ -277,6 +280,7 @@ const MilkdownEditorContent = ({ initialContent, onChange, isEditable, onSelecti
       .use(gfm)
       .use(history)
       .use(listener)
+      .use(breaksPlugin)
       .use(tabKeymapPlugin)
       .use(wikiLinkMilkdownPlugin)
       .use(remoteCursorMilkdownPlugin)
