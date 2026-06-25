@@ -224,6 +224,7 @@
   outline: none !important;
   flex-grow: 1;
   min-height: 500px;
+  white-space: pre-wrap;
 }
 
 /* Fix milkdown list block drops */
