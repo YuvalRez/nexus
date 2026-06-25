@@ -254,6 +254,39 @@ const selectionBroadcastPlugin = $prose(() => new Plugin({
   }
 }));
 
+function preserveSoftBreaks(markdown) {
+  if (!markdown) return markdown;
+  const lines = markdown.split('\n');
+  let inCodeBlock = false;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    
+    if (trimmed.startsWith('```')) {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+    
+    if (!inCodeBlock) {
+      // If line is not empty and doesn't already have a valid Markdown hard break
+      if (line.length > 0 && !line.endsWith('  ') && !line.endsWith('<br>') && !line.endsWith('\\')) {
+        if (i + 1 < lines.length) {
+          const nextTrimmed = lines[i + 1].trim();
+          // If next line is a paragraph continuation (not empty, not a list item, etc.)
+          if (nextTrimmed.length > 0 && 
+              !nextTrimmed.startsWith('- ') && 
+              !nextTrimmed.startsWith('* ') && 
+              !nextTrimmed.match(/^\d+\.\s/)) {
+            lines[i] = line + '  ';
+          }
+        }
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
 const MilkdownEditorContent = ({ initialContent, onChange, isEditable, onSelectionChange, remoteCursor }) => {
   useEffect(() => {
     onSelectionChangeRef = onSelectionChange;
@@ -263,7 +296,7 @@ const MilkdownEditorContent = ({ initialContent, onChange, isEditable, onSelecti
     return Editor.make()
       .config((ctx) => {
         ctx.set(rootCtx, root);
-        ctx.set(defaultValueCtx, initialContent);
+        ctx.set(defaultValueCtx, preserveSoftBreaks(initialContent));
         
         ctx.set(editorViewOptionsCtx, {
           editable: () => isEditable,
@@ -280,7 +313,6 @@ const MilkdownEditorContent = ({ initialContent, onChange, isEditable, onSelecti
       .use(gfm)
       .use(history)
       .use(listener)
-      .use(breaksPlugin)
       .use(tabKeymapPlugin)
       .use(wikiLinkMilkdownPlugin)
       .use(remoteCursorMilkdownPlugin)
