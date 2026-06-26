@@ -19,7 +19,6 @@ export function SortableImageItem({ url, idx, isOwner, setZoomedImageIndex, onRe
     opacity: isDragging ? 0.5 : 1,
     zIndex: isDragging ? 50 : 1,
     position: 'relative',
-    flex: '1 1 200px', // Ensures it wraps beautifully without grid row constraints!
   };
 
   return (
@@ -34,7 +33,7 @@ export function SortableImageItem({ url, idx, isOwner, setZoomedImageIndex, onRe
       <img 
         src={url} 
         alt={`Gallery Image ${idx}`} 
-        className="w-full h-auto block group-hover:scale-105 transition-transform duration-300" 
+        className="w-full aspect-square object-cover block group-hover:scale-105 transition-transform duration-300" 
         onClick={(e) => {
           e.stopPropagation();
           setZoomedImageIndex(idx);

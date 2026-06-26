@@ -734,7 +734,8 @@ export default function NexusPage({ params }) {
             </button>
           </div>
           <div 
-            className="flex-1 overflow-y-auto p-4 flex flex-wrap gap-4 items-start content-start"
+            className="flex-1 overflow-y-auto p-4 grid gap-4 content-start"
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}
           >
             {activeNote.images && activeNote.images.length > 0 ? (
               <DndContext
@@ -770,16 +771,13 @@ export default function NexusPage({ params }) {
                 </SortableContext>
               </DndContext>
             ) : (
-              <div 
-                style={{ flex: '0 1 200px' }} 
-                className="text-center aspect-square flex items-center justify-center px-4 border-2 border-dashed border-border rounded-xl"
-              >
+              <div className="text-center aspect-square flex items-center justify-center px-4 border-2 border-dashed border-border rounded-xl">
                 <p className="text-sm text-foreground/50">No images yet.</p>
               </div>
             )}
 
             {isOwner && (
-              <div style={{ flex: '0 1 200px' }}>
+              <div>
                 <input
                   type="file"
                   accept="image/*"
