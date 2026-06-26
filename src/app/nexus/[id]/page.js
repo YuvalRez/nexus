@@ -771,13 +771,15 @@ export default function NexusPage({ params }) {
                 </SortableContext>
               </DndContext>
             ) : (
-              <div className="text-center aspect-square flex items-center justify-center px-4 border-2 border-dashed border-border rounded-xl">
-                <p className="text-sm text-foreground/50">No images yet.</p>
+              <div className="relative border-2 border-dashed border-border rounded-xl" style={{ paddingBottom: '100%' }}>
+                <div className="absolute inset-0 flex items-center justify-center px-4 text-center">
+                  <p className="text-sm text-foreground/50">No images yet.</p>
+                </div>
               </div>
             )}
 
             {isOwner && (
-              <div>
+              <div className="relative" style={{ paddingBottom: '100%' }}>
                 <input
                   type="file"
                   accept="image/*"
@@ -788,7 +790,7 @@ export default function NexusPage({ params }) {
                 />
                 <button
                   onClick={() => imageInputRef.current?.click()}
-                  className="w-full aspect-square border-2 border-dashed border-primary-500/30 rounded-xl hover:border-primary-500 hover:bg-primary-500/5 transition-all flex flex-col items-center justify-center gap-2 text-primary-500"
+                  className="absolute inset-0 w-full h-full border-2 border-dashed border-primary-500/30 rounded-xl hover:border-primary-500 hover:bg-primary-500/5 transition-all flex flex-col items-center justify-center gap-2 text-primary-500"
                 >
                   <PlusCircle className="w-6 h-6" />
                   <span className="text-sm font-medium">Add Images</span>

@@ -24,7 +24,7 @@ export function SortableImageItem({ url, idx, isOwner, setZoomedImageIndex, onRe
   return (
     <div 
       ref={setNodeRef}
-      style={style}
+      style={{ ...style, paddingBottom: '100%' }}
       {...(isOwner ? attributes : {})} 
       {...(isOwner ? listeners : {})}
       className={`relative group rounded-xl overflow-hidden border border-border shadow-sm hover:shadow-md bg-black/5 ${isOwner ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? '' : 'transition-all'}`}
@@ -33,7 +33,7 @@ export function SortableImageItem({ url, idx, isOwner, setZoomedImageIndex, onRe
       <img 
         src={url} 
         alt={`Gallery Image ${idx}`} 
-        className="w-full aspect-square object-cover block group-hover:scale-105 transition-transform duration-300" 
+        className="absolute inset-0 w-full h-full object-contain block group-hover:scale-105 transition-transform duration-300" 
         onClick={(e) => {
           e.stopPropagation();
           setZoomedImageIndex(idx);
