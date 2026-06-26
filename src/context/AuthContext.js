@@ -58,8 +58,7 @@ export function AuthProvider({ children }) {
   };
 
   const loginWithGoogle = () => {
-    // Strictly use redirect to permanently bypass all browser popup blockers
-    return signInWithRedirect(auth, googleProvider);
+    return signInWithPopup(auth, googleProvider);
   };
 
   const logout = () => {
