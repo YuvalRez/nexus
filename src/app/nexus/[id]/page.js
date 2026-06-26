@@ -163,20 +163,52 @@ export default function NexusPage({ params }) {
   useEffect(() => {
     if (!activeNoteId || isOwner) return;
     
+    let currentCursor = null;
+    
+    const checkExpiration = () => {
+      if (!currentCursor) return;
+      const now = Date.now();
+      const updatedAt = currentCursor.updatedAt?.toMillis() || 0;
+      
+      // If the owner hasn't moved their cursor in 15 seconds, consider them idle/disconnected and hide it
+      if (now - updatedAt > 15000) {
+        setRemoteCursor(null);
+      } else {
+        setRemoteCursor(currentCursor);
+      }
+    };
+
     const unsubscribe = onSnapshot(doc(db, "cursors", activeNoteId), (snapshot) => {
       if (snapshot.exists()) {
-        setRemoteCursor(snapshot.data());
+        currentCursor = snapshot.data();
+        checkExpiration();
       } else {
+        currentCursor = null;
         setRemoteCursor(null);
       }
     });
     
-    return () => unsubscribe();
+    // Check for expired cursors every 5 seconds
+    const interval = setInterval(checkExpiration, 5000);
+    
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [activeNoteId, isOwner]);
 
   // Broadcast cursor updates (Owner only)
   const handleSelectionChange = (selection) => {
     if (!isOwner || !activeNoteId) return;
+    
+    if (selection === null) {
+      if (cursorUpdateTimeoutRef.current) {
+        clearTimeout(cursorUpdateTimeoutRef.current);
+        cursorUpdateTimeoutRef.current = null;
+      }
+      deleteDoc(doc(db, "cursors", activeNoteId)).catch(() => {});
+      return;
+    }
     
     // Throttle to 1 write per second to respect Firebase quotas
     if (cursorUpdateTimeoutRef.current) return;
@@ -192,6 +224,23 @@ export default function NexusPage({ params }) {
       cursorUpdateTimeoutRef.current = null;
     }, 1000);
   };
+
+  // Cleanup cursor when leaving a note (Owner only)
+  useEffect(() => {
+    if (!isOwner || !activeNoteId) return;
+    
+    const handleBeforeUnload = () => {
+      // Best-effort removal on tab close
+      deleteDoc(doc(db, "cursors", activeNoteId)).catch(() => {});
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      // When activeNoteId changes or component unmounts, remove the cursor for this note
+      deleteDoc(doc(db, "cursors", activeNoteId)).catch(console.error);
+    };
+  }, [activeNoteId, isOwner]);
 
   const checkAndDeleteOrphanedImages = async (urlsToCheck) => {
     if (!urlsToCheck || urlsToCheck.length === 0) return;

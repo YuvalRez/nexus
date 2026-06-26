@@ -242,7 +242,7 @@ const selectionBroadcastPlugin = $prose(() => new Plugin({
     return {
       update(view, prevState) {
         if (prevState && !prevState.selection.eq(view.state.selection)) {
-          if (onSelectionChangeRef) {
+          if (view.hasFocus() && onSelectionChangeRef) {
             onSelectionChangeRef({
               from: view.state.selection.from,
               to: view.state.selection.to
@@ -251,6 +251,25 @@ const selectionBroadcastPlugin = $prose(() => new Plugin({
         }
       }
     };
+  },
+  props: {
+    handleDOMEvents: {
+      blur(view) {
+        if (onSelectionChangeRef) {
+          onSelectionChangeRef(null);
+        }
+        return false;
+      },
+      focus(view) {
+        if (onSelectionChangeRef) {
+          onSelectionChangeRef({
+            from: view.state.selection.from,
+            to: view.state.selection.to
+          });
+        }
+        return false;
+      }
+    }
   }
 }));
 
