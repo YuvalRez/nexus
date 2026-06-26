@@ -34,6 +34,18 @@ export default function NexusPage({ params }) {
   const [editorKeySuffix, setEditorKeySuffix] = useState(0);
   const [zoomedImageIndex, setZoomedImageIndex] = useState(null);
   
+  const [isDeepZoomed, setIsDeepZoomed] = useState(false);
+  const [panPos, setPanPos] = useState({ x: 0, y: 0 });
+  const [isDraggingPan, setIsDraggingPan] = useState(false);
+  
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const lastPanPosRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    setIsDeepZoomed(false);
+    setPanPos({ x: 0, y: 0 });
+  }, [zoomedImageIndex]);
+
   const [isEditingNexusName, setIsEditingNexusName] = useState(false);
   const [editNexusName, setEditNexusName] = useState("");
   const [isSavingNexus, setIsSavingNexus] = useState(false);
@@ -894,12 +906,71 @@ export default function NexusPage({ params }) {
             </div>
           </div>
 
-          {/* The Zoomed Image */}
-          <img 
-            src={activeNote.images[zoomedImageIndex]} 
-            alt="Zoomed Fullscreen" 
-            className="max-w-full max-h-full object-contain pointer-events-none"
-          />
+          {/* The Zoomed Image Container */}
+          <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none">
+            <div 
+              style={{ transform: `translate(${panPos.x}px, ${panPos.y}px)` }}
+              className={`flex items-center justify-center w-full h-full pointer-events-auto ${isDraggingPan ? '' : 'transition-transform duration-75 ease-out'}`}
+            >
+              <img 
+                src={activeNote.images[zoomedImageIndex]} 
+                alt="Zoomed Fullscreen" 
+                draggable="false"
+                className={`transition-transform duration-300 origin-center ${isDeepZoomed ? 'scale-[2.5] cursor-grab active:cursor-grabbing' : 'max-w-[95vw] max-h-[95vh] object-contain cursor-zoom-in scale-100'}`}
+                onPointerDown={(e) => {
+                  if (!isDeepZoomed) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsDraggingPan(true);
+                  dragStartRef.current = { x: e.clientX, y: e.clientY };
+                  lastPanPosRef.current = panPos;
+                  
+                  const handleMove = (ev) => {
+                    const dx = ev.clientX - dragStartRef.current.x;
+                    const dy = ev.clientY - dragStartRef.current.y;
+                    setPanPos({
+                      x: lastPanPosRef.current.x + dx,
+                      y: lastPanPosRef.current.y + dy
+                    });
+                  };
+                  const handleUp = () => {
+                    setIsDraggingPan(false);
+                    document.removeEventListener('pointermove', handleMove);
+                    document.removeEventListener('pointerup', handleUp);
+                    document.removeEventListener('pointercancel', handleUp);
+                  };
+                  document.addEventListener('pointermove', handleMove);
+                  document.addEventListener('pointerup', handleUp);
+                  document.addEventListener('pointercancel', handleUp);
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  
+                  if (isDeepZoomed) {
+                    const dx = Math.abs(e.clientX - dragStartRef.current.x);
+                    const dy = Math.abs(e.clientY - dragStartRef.current.y);
+                    if (dx > 5 || dy > 5) return; // Prevent zooming out if they were dragging
+                  }
+
+                  if (!isDeepZoomed) {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const centerX = rect.left + rect.width / 2;
+                    const centerY = rect.top + rect.height / 2;
+                    // (center - click) * (scale - 1)
+                    // Scale is 2.5, so scale - 1 = 1.5
+                    const targetPanX = (centerX - e.clientX) * 1.5;
+                    const targetPanY = (centerY - e.clientY) * 1.5;
+                    
+                    setPanPos({ x: targetPanX, y: targetPanY });
+                    setIsDeepZoomed(true);
+                  } else {
+                    setPanPos({ x: 0, y: 0 });
+                    setIsDeepZoomed(false);
+                  }
+                }}
+              />
+            </div>
+          </div>
 
           {/* Thumbnail Strip */}
           <div 
