@@ -234,6 +234,20 @@
   display: inline !important;
 }
 
+/* Auto-detect RTL/LTR direction per line (for Hebrew/Arabic) */
+.milkdown .editor p,
+.milkdown .editor h1,
+.milkdown .editor h2,
+.milkdown .editor h3,
+.milkdown .editor h4,
+.milkdown .editor h5,
+.milkdown .editor h6,
+.milkdown .editor li,
+.milkdown .editor blockquote {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+
 /* Collaborative Cursor Styles */
 .collaborative-cursor {
   position: relative;
