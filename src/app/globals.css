@@ -100,11 +100,13 @@
   font-weight: 600;
 }
 .prose a {
-  color: var(--color-primary-400);
+  color: #a78bfa !important; /* Obsidian purple */
+  text-decoration: none !important;
+  font-weight: 500;
   transition: color 0.2s;
 }
 .prose a:hover {
-  color: var(--color-primary-300);
+  text-decoration: underline !important;
 }
 .prose code {
   background-color: rgba(255, 255, 255, 0.1);
@@ -137,7 +139,43 @@
 }
 .prose ul {
   list-style-type: disc;
-  list-style-position: inside;
+  list-style-position: outside;
+  padding-left: 1.5rem;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+.prose ol {
+  list-style-type: decimal;
+  list-style-position: outside;
+  padding-left: 1.5rem;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+.prose li {
+  margin-top: 0.1em;
+  margin-bottom: 0.1em;
+}
+
+/* Hidden indent spaces for space-indented paragraphs */
+.hidden-indent {
+  opacity: 0;
+  font-size: 0;
+  position: absolute;
+  pointer-events: none;
+}
+
+.space-indented-paragraph {
+  position: relative;
+}
+
+.indent-guide-line {
+  position: absolute;
+  top: -0.25em;
+  bottom: -0.25em;
+  width: 1px;
+  background-color: rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+  z-index: 1;
 }
 .prose ol {
   list-style-type: decimal;
@@ -207,10 +245,27 @@
   opacity: 1; /* Fully visible when editing */
 }
 .wiki-link-text {
-  /* Inherit default text color instead of blue */
-  color: inherit; 
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  color: #a78bfa !important; /* Obsidian purple */
+  text-decoration: none !important;
+  font-weight: 500;
+}
+.wiki-link-text:hover {
+  text-decoration: underline !important;
+}
+
+.markdown-syntax-hint {
+  color: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+  user-select: none;
+  font-family: monospace;
+}
+
+.custom-bold {
+  font-weight: bold;
+}
+
+.custom-italic {
+  font-style: italic;
 }
 
 /* Fix milkdown default container style bleeding and expand to fill space */
@@ -231,7 +286,7 @@
 .milkdown .editor li > p,
 .milkdown .editor li > div {
   margin: 0 !important;
-  display: inline !important;
+  display: block !important;
 }
 
 /* Auto-detect RTL/LTR direction per line (for Hebrew/Arabic) */

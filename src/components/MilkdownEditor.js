@@ -2,7 +2,11 @@
 
 import React, { useEffect } from 'react';
 import { Editor, rootCtx, defaultValueCtx, editorViewOptionsCtx } from '@milkdown/core';
-import { commonmark } from '@milkdown/preset-commonmark';
+import { 
+  commonmark, 
+  strongAttr, strongSchema, strongInputRule, strongKeymap, toggleStrongCommand,
+  emphasisAttr, emphasisSchema, emphasisStarInputRule, emphasisUnderscoreInputRule, emphasisKeymap, toggleEmphasisCommand
+} from '@milkdown/preset-commonmark';
 import { gfm } from '@milkdown/preset-gfm';
 import { history } from '@milkdown/plugin-history';
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react';
@@ -150,6 +154,34 @@ function buildDecorations(doc, selection, isFocusedView) {
   doc.descendants((node, pos) => {
     if (node.isText) {
       const text = node.text;
+      
+      const processRegex = (regex, customClass, bracketLength) => {
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+          const start = pos + match.index;
+          const end = start + match[0].length;
+          const isFocused = isFocusedView && selection && 
+            ((selection.from >= start && selection.from <= end) || 
+             (selection.to >= start && selection.to <= end));
+             
+          if (!isFocused) {
+            decorations.push(Decoration.inline(start, start + bracketLength, { class: 'wiki-bracket-hidden' }));
+            decorations.push(Decoration.inline(start + bracketLength, end - bracketLength, { class: customClass }));
+            decorations.push(Decoration.inline(end - bracketLength, end, { class: 'wiki-bracket-hidden' }));
+          } else {
+            decorations.push(Decoration.inline(start + bracketLength, end - bracketLength, { class: customClass }));
+          }
+        }
+      };
+
+      // Match **word** or __word__
+      const boldRegex = /(?:\*\*|__)(.*?)(?:\*\*|__)/g;
+      processRegex(boldRegex, 'custom-bold', 2);
+      
+      // Match *word* or _word_ (ensuring we don't match the inside of **word**)
+      const italicRegex = /(?<!\*)\*([^*]+)\*(?!\*)|(?<!_)_([^_]+)_(?!_)/g;
+      processRegex(italicRegex, 'custom-italic', 1);
+
       // Match [[target|display]] or [[target]]
       const regex = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
       let match;
@@ -161,35 +193,29 @@ function buildDecorations(doc, selection, isFocusedView) {
         const displayText = match[2];
         const hasPipe = displayText !== undefined;
         
-        // If the selection is inside this wiki-link AND the editor is actively focused
         const isFocused = isFocusedView && selection && selection.from >= start && selection.to <= end;
         
         if (!isFocused) {
-          // Hide [[
           decorations.push(Decoration.inline(start, start + 2, { class: 'wiki-bracket-hidden' }));
           
           if (hasPipe) {
-            // Hide the target and the pipe (e.g., 'Jess Silver|')
             const targetStart = start + 2;
-            const targetEnd = targetStart + targetText.length + 1; // +1 for the pipe '|'
+            const targetEnd = targetStart + targetText.length + 1;
             decorations.push(Decoration.inline(targetStart, targetEnd, { class: 'wiki-bracket-hidden' }));
-            
-            // Style the display text
             decorations.push(Decoration.inline(targetEnd, end - 2, { class: 'wiki-link-text' }));
           } else {
-            // No pipe, style the whole inside text
             decorations.push(Decoration.inline(start + 2, end - 2, { class: 'wiki-link-text' }));
           }
           
-          // Hide ]]
           decorations.push(Decoration.inline(end - 2, end, { class: 'wiki-bracket-hidden' }));
         } else {
-          // Focused: Show everything normally
           decorations.push(Decoration.inline(start + 2, end - 2, { class: 'wiki-link-text' }));
         }
       }
     }
   });
+
+  // Removed second pass block-level mark checking
   return DecorationSet.create(doc, decorations);
 }
 
@@ -233,6 +259,60 @@ const remoteCursorMilkdownPlugin = $prose(() => new Plugin({
   }
 }));
 
+const indentGuideKey = new PluginKey('indentGuide');
+
+const indentGuidePlugin = $prose(() => new Plugin({
+  key: indentGuideKey,
+  state: {
+    init(_, { doc }) {
+      return buildIndentDecorations(doc);
+    },
+    apply(tr, old, oldState, newState) {
+      if (!tr.docChanged) return old;
+      return buildIndentDecorations(newState.doc);
+    }
+  },
+  props: {
+    decorations(state) {
+      return this.getState(state);
+    }
+  }
+}));
+
+function buildIndentDecorations(doc) {
+  const decorations = [];
+  doc.descendants((node, pos) => {
+    if (node.isTextblock) {
+      const text = node.textContent;
+      const match = text.match(/^\u200B([ \t]+)/);
+      if (match) {
+        const spaceCount = match[1].replace(/\t/g, '    ').length;
+        const level = Math.floor(spaceCount / 2); // 2 spaces per level, assuming standard Obsidian behavior
+        
+        // Hide the zero-width space and actual spaces so they don't break the layout
+        decorations.push(Decoration.inline(pos + 1, pos + 1 + match[0].length, {
+          class: 'hidden-indent'
+        }));
+        
+        // Add padding to the paragraph to provide visual indentation
+        decorations.push(Decoration.node(pos, pos + node.nodeSize, {
+          style: `padding-left: ${level * 1.5}rem;`,
+          class: 'space-indented-paragraph'
+        }));
+        
+        // Add vertical lines
+        for (let i = 1; i <= level; i++) {
+          const widget = document.createElement('span');
+          widget.className = 'indent-guide-line';
+          widget.style.left = `${(i - 0.5) * 1.5}rem`; // Center the line in the padding step
+          decorations.push(Decoration.widget(pos + 1, widget));
+        }
+      }
+    }
+  });
+  return DecorationSet.create(doc, decorations);
+}
+
 const selectionBroadcastKey = new PluginKey('selectionBroadcast');
 let onSelectionChangeRef = null;
 
@@ -273,6 +353,39 @@ const selectionBroadcastPlugin = $prose(() => new Plugin({
   }
 }));
 
+function preserveIndentationAndSyntax(markdown) {
+  if (!markdown) return markdown;
+  let lines = markdown.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    
+    const match = line.match(/^([ \t]+)(.*)/);
+    if (match && !match[2].startsWith('- ') && !match[2].startsWith('* ') && !match[2].match(/^\d+\.\s/)) {
+      const spaces = match[1].replace(/\t/g, '    ');
+      line = '\u200B' + spaces + match[2];
+    }
+    
+    let newLine = '';
+    for (let j = 0; j < line.length; j++) {
+      if ((line[j] === '*' || line[j] === '_') && (line[j+1] === ' ' || line[j+1] === '\t')) {
+        const prefix = line.slice(0, j);
+        if (prefix.trim() === '' || prefix.trim() === '\u200B') {
+          newLine += line[j];
+          continue;
+        }
+      }
+      
+      if (line[j] === '*' || line[j] === '_') {
+        newLine += '\\' + line[j];
+      } else {
+        newLine += line[j];
+      }
+    }
+    lines[i] = newLine;
+  }
+  return lines.join('\n');
+}
+
 function preserveSoftBreaks(markdown) {
   if (!markdown) return markdown;
   const lines = markdown.split('\n');
@@ -312,10 +425,11 @@ const MilkdownEditorContent = ({ initialContent, onChange, isEditable, onSelecti
   }, [onSelectionChange]);
 
   const { get, editor } = useEditor((root) => {
+    console.log("Commonmark plugins:", commonmark.map(p => p.id || (p.meta && p.meta.id) || p.name || typeof p));
     return Editor.make()
       .config((ctx) => {
         ctx.set(rootCtx, root);
-        ctx.set(defaultValueCtx, preserveSoftBreaks(initialContent));
+        ctx.set(defaultValueCtx, preserveSoftBreaks(preserveIndentationAndSyntax(initialContent)));
         
         ctx.set(editorViewOptionsCtx, {
           editable: () => isEditable,
@@ -324,17 +438,23 @@ const MilkdownEditorContent = ({ initialContent, onChange, isEditable, onSelecti
 
         ctx.get(listenerCtx).markdownUpdated((ctx, markdown, prevMarkdown) => {
           if (markdown !== prevMarkdown && onChange) {
-            onChange(markdown);
+            let cleanMarkdown = markdown.replace(/^\u200B/gm, '');
+            cleanMarkdown = cleanMarkdown.replace(/\\\*/g, '*').replace(/\\_/g, '_');
+            onChange(cleanMarkdown);
           }
         });
       })
-      .use(commonmark)
+      .use(commonmark.filter(plugin => {
+        return plugin !== strongAttr && plugin !== strongSchema && plugin !== strongInputRule && plugin !== strongKeymap && plugin !== toggleStrongCommand &&
+               plugin !== emphasisAttr && plugin !== emphasisSchema && plugin !== emphasisStarInputRule && plugin !== emphasisUnderscoreInputRule && plugin !== emphasisKeymap && plugin !== toggleEmphasisCommand;
+      }))
       .use(gfm)
       .use(history)
       .use(listener)
       .use(tabKeymapPlugin)
       .use(wikiLinkMilkdownPlugin)
       .use(remoteCursorMilkdownPlugin)
+      .use(indentGuidePlugin)
       .use(selectionBroadcastPlugin);
   }, [isEditable]); // Rebuild if isEditable changes
 
