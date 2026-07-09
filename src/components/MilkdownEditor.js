@@ -433,7 +433,54 @@ const MilkdownEditorContent = ({ initialContent, onChange, isEditable, onSelecti
         
         ctx.set(editorViewOptionsCtx, {
           editable: () => isEditable,
-          attributes: { spellcheck: 'false' }
+          attributes: { spellcheck: 'false' },
+          transformPastedHTML: (html) => {
+            try {
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(html, 'text/html');
+              
+              const replaceNode = (node, prefix, suffix) => {
+                const textNode = doc.createTextNode(prefix + node.textContent + suffix);
+                node.parentNode.replaceChild(textNode, node);
+              };
+
+              const bolds = Array.from(doc.querySelectorAll('strong, b, .cm-strong'));
+              bolds.forEach(node => replaceNode(node, '**', '**'));
+
+              const italics = Array.from(doc.querySelectorAll('em, i, .cm-em'));
+              italics.forEach(node => replaceNode(node, '*', '*'));
+
+              const links = Array.from(doc.querySelectorAll('a, .internal-link, .cm-hmd-internal-link'));
+              links.forEach(node => {
+                if (node.tagName.toLowerCase() === 'a') {
+                  const href = node.getAttribute('href');
+                  if (node.classList.contains('internal-link') || (href && !href.startsWith('http') && !href.startsWith('mailto:'))) {
+                     const displayText = node.textContent;
+                     let target = href ? decodeURIComponent(href).replace(/^\//, '') : displayText;
+                     if (target.startsWith('app://')) target = displayText;
+                     
+                     if (target === displayText) {
+                       replaceNode(node, '[[', ']]');
+                     } else {
+                       replaceNode(node, `[[${target}|`, ']]');
+                     }
+                  }
+                } else if (node.tagName.toLowerCase() === 'span') {
+                  // It's a CodeMirror span from Obsidian Edit Mode, just let its text content flow through
+                  // But we can strip the span itself
+                  const fragment = document.createDocumentFragment();
+                  while (node.firstChild) {
+                    fragment.appendChild(node.firstChild);
+                  }
+                  node.parentNode.replaceChild(fragment, node);
+                }
+              });
+
+              return doc.body.innerHTML;
+            } catch (e) {
+              return html;
+            }
+          }
         });
 
         ctx.get(listenerCtx).markdownUpdated((ctx, markdown, prevMarkdown) => {
