@@ -218,6 +218,24 @@ export default function NexusPage({ params }) {
   const activeNote = notes.find(n => n.id === activeNoteId);
   const isOwner = user && nexus && nexus.ownerId === user.uid;
 
+  // Eject viewer if their active note is no longer in the allowed tree
+  useEffect(() => {
+    if (activeNoteId && notes.length > 0) {
+      if (!isOwner) {
+        const checkNodes = (nodes) => {
+          for (const node of nodes) {
+            if (node.id === activeNoteId) return true;
+            if (folderChildren[node.id] && checkNodes(folderChildren[node.id])) return true;
+          }
+          return false;
+        };
+        if (!checkNodes(rootItems)) {
+          setActiveNoteId(null);
+        }
+      }
+    }
+  }, [activeNoteId, rootItems, folderChildren, isOwner, notes.length]);
+
   // Listen to remote cursor updates (Viewers only)
   useEffect(() => {
     if (!activeNoteId || isOwner) return;
@@ -966,11 +984,21 @@ export default function NexusPage({ params }) {
               <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-background relative flex flex-col items-center">
                 <div className="w-full max-w-[800px] mt-8 flex-1 flex flex-col">
                   {activeNote.isFolder ? (
-                    <FolderAccessControl 
-                      folder={activeNote} 
-                      nexus={nexus} 
-                      isOwner={isOwner} 
-                    />
+                    isOwner ? (
+                      <FolderAccessControl 
+                        folder={activeNote} 
+                        nexus={nexus} 
+                        isOwner={isOwner} 
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center p-12 text-center text-foreground/40 mt-12 animate-fade-in-up">
+                        <div className="w-16 h-16 bg-primary-500/10 text-primary-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                          <Folder className="w-8 h-8" />
+                        </div>
+                        <h2 className="text-xl font-medium mb-2 text-foreground/80">{activeNote.title}</h2>
+                        <p>Access control settings for this folder are managed by the Nexus Owner.</p>
+                      </div>
+                    )
                   ) : (
                     <MilkdownEditor 
                       key={isOwner ? `${activeNote.id}-${editorKeySuffix}` : `${activeNote.id}-${activeNote.updatedAt?.toMillis() || 'viewer'}`}
@@ -994,8 +1022,8 @@ export default function NexusPage({ params }) {
       </div>
       </div>
 
-      {/* Right Side: Image Gallery (Only if note is active) */}
-      {activeNote && (
+      {/* Right Side: Image Gallery (Only if note is active and it's NOT a folder) */}
+      {activeNote && !activeNote.isFolder && (
         <div 
           style={{ width: isGalleryCollapsed ? '0px' : `${galleryWidth}px`, transition: isResizing ? 'none' : 'width 0.3s ease' }}
           className="border-l border-border bg-card flex flex-col flex-shrink-0 z-20 relative overflow-hidden"

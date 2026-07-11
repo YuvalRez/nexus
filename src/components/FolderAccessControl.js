@@ -96,10 +96,34 @@ export function FolderAccessControl({ folder, nexus, isOwner }) {
         <div className="p-4 border-b border-border bg-foreground/5 flex items-center justify-between">
           <h3 className="font-semibold flex items-center gap-2">
             <Users className="w-4 h-4" /> Nexus Viewers
+            <span className="text-xs font-medium px-2 py-0.5 bg-background rounded-md text-foreground/50 border border-border ml-1">
+              {viewers.length}
+            </span>
           </h3>
-          <span className="text-xs font-medium px-2 py-1 bg-background rounded-md text-foreground/50 border border-border">
-            {viewers.length} Viewers
-          </span>
+          {isOwner && viewers.length > 0 && (
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={async () => {
+                  try {
+                    await updateDoc(doc(db, "notes", folder.id), { allowedViewers: null });
+                  } catch (e) { alert("Failed to update access."); }
+                }}
+                className="text-xs font-medium px-3 py-1.5 bg-green-500/10 text-green-600 rounded-lg hover:bg-green-500/20 transition-colors flex items-center gap-1"
+              >
+                <Check className="w-3 h-3" /> Allow All
+              </button>
+              <button 
+                onClick={async () => {
+                  try {
+                    await updateDoc(doc(db, "notes", folder.id), { allowedViewers: [] });
+                  } catch (e) { alert("Failed to update access."); }
+                }}
+                className="text-xs font-medium px-3 py-1.5 bg-red-500/10 text-red-600 rounded-lg hover:bg-red-500/20 transition-colors flex items-center gap-1"
+              >
+                <X className="w-3 h-3" /> Deny All
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="divide-y divide-border">
