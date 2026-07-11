@@ -13,6 +13,7 @@ import { DndContext, closestCenter, pointerWithin, KeyboardSensor, PointerSensor
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, rectSortingStrategy } from '@dnd-kit/sortable';
 import { TreeNoteItem } from "@/components/SortableNoteItem";
 import { TreeFolderItem } from "@/components/FolderItem";
+import { FolderAccessControl } from "@/components/FolderAccessControl";
 import { DraggableNode } from "@/components/DraggableNode";
 import { SortableImageItem } from "@/components/SortableImageItem";
 import InviteModal from "@/components/InviteModal";
@@ -118,7 +119,9 @@ export default function NexusPage({ params }) {
   const { rootItems, folderChildren } = useMemo(() => {
     const root = [];
     const childrenByFolder = {};
+    const isOwner = user?.uid === nexus?.ownerId;
     
+    // First pass: group by folderId
     notes.forEach(note => {
       if (note.folderId) {
         if (!childrenByFolder[note.folderId]) childrenByFolder[note.folderId] = [];
@@ -128,8 +131,33 @@ export default function NexusPage({ params }) {
       }
     });
     
-    return { rootItems: root, folderChildren: childrenByFolder };
-  }, [notes]);
+    if (isOwner) {
+      return { rootItems: root, folderChildren: childrenByFolder };
+    }
+
+    // Viewers: recursively filter out restricted folders
+    const isNodeAllowed = (node) => {
+      if (node.isFolder && node.allowedViewers && Array.isArray(node.allowedViewers)) {
+        if (!node.allowedViewers.includes(user?.uid)) {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    const filterTree = (nodes) => {
+      return nodes.filter(node => {
+        if (!isNodeAllowed(node)) return false;
+        if (node.isFolder && childrenByFolder[node.id]) {
+          childrenByFolder[node.id] = filterTree(childrenByFolder[node.id]);
+        }
+        return true;
+      });
+    };
+
+    const filteredRoot = filterTree(root);
+    return { rootItems: filteredRoot, folderChildren: childrenByFolder };
+  }, [notes, user, nexus]);
 
   // Reset scroll position when opening a different note
   useEffect(() => {
@@ -938,27 +966,11 @@ export default function NexusPage({ params }) {
               <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-background relative flex flex-col items-center">
                 <div className="w-full max-w-[800px] mt-8 flex-1 flex flex-col">
                   {activeNote.isFolder ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 w-full">
-                      {(folderChildren[activeNote.id] || []).map(child => (
-                        <div 
-                          key={child.id}
-                          onClick={() => setActiveNoteId(child.id)}
-                          className="flex flex-col items-center justify-center p-6 bg-card border border-border rounded-xl hover:border-primary-500 hover:shadow-lg transition-all cursor-pointer group"
-                        >
-                          {child.isFolder ? (
-                            <Folder className="w-12 h-12 text-primary-500 mb-3 group-hover:scale-110 transition-transform" />
-                          ) : (
-                            <FileText className="w-12 h-12 text-foreground/40 mb-3 group-hover:scale-110 transition-transform group-hover:text-primary-500" />
-                          )}
-                          <span className="font-medium text-center line-clamp-2">{child.title}</span>
-                        </div>
-                      ))}
-                      {(!folderChildren[activeNote.id] || folderChildren[activeNote.id].length === 0) && (
-                        <div className="col-span-full text-center py-12 text-foreground/40">
-                          <p>This folder is empty.</p>
-                        </div>
-                      )}
-                    </div>
+                    <FolderAccessControl 
+                      folder={activeNote} 
+                      nexus={nexus} 
+                      isOwner={isOwner} 
+                    />
                   ) : (
                     <MilkdownEditor 
                       key={isOwner ? `${activeNote.id}-${editorKeySuffix}` : `${activeNote.id}-${activeNote.updatedAt?.toMillis() || 'viewer'}`}
