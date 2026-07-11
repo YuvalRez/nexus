@@ -1,12 +1,14 @@
 import React, { useRef } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 
-export function DraggableNode({ id, isOwner, isDragging, children, depth = 0 }) {
+export function DraggableNode({ id, isOwner, isDragging, children, depth = 0, isDraggingFolder, isTargetFolder }) {
   // Draggable hook for the entire node
   const { attributes, listeners, setNodeRef: setDraggableRef } = useDraggable({
     id: id,
     disabled: !isOwner,
   });
+
+  const noMergeZone = isDraggingFolder && !isTargetFolder;
 
   // Three droppable zones
   const { isOver: isAboveOver, setNodeRef: setAboveRef } = useDroppable({
@@ -16,7 +18,7 @@ export function DraggableNode({ id, isOwner, isDragging, children, depth = 0 }) 
 
   const { isOver: isGroupOver, setNodeRef: setGroupRef } = useDroppable({
     id: `group-${id}`,
-    disabled: !isOwner,
+    disabled: !isOwner || noMergeZone,
   });
 
   const { isOver: isBelowOver, setNodeRef: setBelowRef } = useDroppable({
@@ -40,9 +42,9 @@ export function DraggableNode({ id, isOwner, isDragging, children, depth = 0 }) 
       {/* Drop Zones (Absolute positioned over the content) */}
       {!isDragging && isOwner && (
         <>
-          <div ref={setAboveRef} className="absolute inset-x-0 top-0 h-[40%] z-20 pointer-events-none" />
-          <div ref={setGroupRef} className="absolute inset-x-0 top-[40%] bottom-[40%] z-20 pointer-events-none" />
-          <div ref={setBelowRef} className="absolute inset-x-0 bottom-0 h-[40%] z-20 pointer-events-none" />
+          <div ref={setAboveRef} className={`absolute inset-x-0 top-0 ${noMergeZone ? "h-[50%]" : "h-[35%]"} z-20 pointer-events-none`} />
+          {!noMergeZone && <div ref={setGroupRef} className="absolute inset-x-0 top-[35%] bottom-[35%] z-20 pointer-events-none" />}
+          <div ref={setBelowRef} className={`absolute inset-x-0 bottom-0 ${noMergeZone ? "h-[50%]" : "h-[35%]"} z-20 pointer-events-none`} />
         </>
       )}
 

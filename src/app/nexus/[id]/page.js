@@ -652,17 +652,10 @@ export default function NexusPage({ params }) {
       let currentParentId = targetNote.folderId;
       while (currentParentId) {
         if (currentParentId === activeNote.id) {
-          alert("Cannot move a folder into its own sub-folder.");
-          return;
+          return; // Silently ignore cycle
         }
         const parentNote = notes.find(n => n.id === currentParentId);
         currentParentId = parentNote ? parentNote.folderId : null;
-      }
-      
-      // Also prevent grouping a folder into anything
-      if (action === 'group') {
-        alert("You cannot group a folder. You can place it above or below other items.");
-        return;
       }
     }
 
@@ -865,14 +858,18 @@ export default function NexusPage({ params }) {
     );
   }
 
-  const renderTree = (items, depth = 0) => {
-    return items.map(item => (
+  const activeDragNode = activeDragId ? notes.find(n => n.id === activeDragId) : null;
+
+  const renderTree = (nodes, depth = 0) => {
+    return nodes.map(item => (
       <DraggableNode 
         key={item.id} 
         id={item.id} 
         isOwner={isOwner} 
         isDragging={activeDragId === item.id}
         depth={depth}
+        isDraggingFolder={activeDragNode?.isFolder}
+        isTargetFolder={item.isFolder}
       >
         {item.isFolder ? (
           <TreeFolderItem
