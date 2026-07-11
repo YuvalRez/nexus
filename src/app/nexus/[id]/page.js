@@ -422,7 +422,7 @@ export default function NexusPage({ params }) {
           if (folderCache[currentPathAcc]) {
             currentFolderId = folderCache[currentPathAcc];
           } else {
-            const existingFolder = notes.find(n => n.isFolder && n.title === folderName && n.folderId === currentFolderId);
+            const existingFolder = notes.find(n => n.isFolder && n.title === folderName && (n.folderId || null) === (currentFolderId || null));
             
             if (existingFolder) {
               currentFolderId = existingFolder.id;
@@ -444,7 +444,7 @@ export default function NexusPage({ params }) {
           }
         }
 
-        const existingNote = notes.find(n => !n.isFolder && n.title.toLowerCase() === title.toLowerCase() && n.folderId === currentFolderId);
+        const existingNote = notes.find(n => !n.isFolder && n.title.toLowerCase() === title.toLowerCase());
 
         if (existingNote) {
           await updateDoc(doc(db, "notes", existingNote.id), {
