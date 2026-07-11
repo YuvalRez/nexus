@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useState, useRef, use } from "react";
+import { useEffect, useState, useRef, use, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, getDocs, collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, updateDoc, arrayUnion, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
-import { Edit2, ArrowLeft, Users, File, Lock, FileUp, BookOpen, Save, Trash2, PlusCircle, ChevronLeft, ChevronRight, X, PanelRightClose, PanelRightOpen, RotateCcw } from "lucide-react";
+import { Edit2, ArrowLeft, Users, File, Lock, FileUp, BookOpen, Save, Trash2, PlusCircle, ChevronLeft, ChevronRight, X, PanelRightClose, PanelRightOpen, RotateCcw, Folder, FileText } from "lucide-react";
 import Link from "next/link";
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, closestCenter, pointerWithin, KeyboardSensor, PointerSensor, useSensor, useSensors, DragOverlay } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, rectSortingStrategy } from '@dnd-kit/sortable';
-import { SortableNoteItem } from "@/components/SortableNoteItem";
+import { TreeNoteItem } from "@/components/SortableNoteItem";
+import { TreeFolderItem } from "@/components/FolderItem";
+import { DraggableNode } from "@/components/DraggableNode";
 import { SortableImageItem } from "@/components/SortableImageItem";
 import InviteModal from "@/components/InviteModal";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -31,6 +33,7 @@ export default function NexusPage({ params }) {
   const [error, setError] = useState("");
   const [isDraggingMd, setIsDraggingMd] = useState(false);
   const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const [activeDragId, setActiveDragId] = useState(null);
   const [editorKeySuffix, setEditorKeySuffix] = useState(0);
   const [zoomedImageIndex, setZoomedImageIndex] = useState(null);
   
@@ -111,6 +114,22 @@ export default function NexusPage({ params }) {
 
     return () => unsubscribe();
   }, [user, nexusId, error]);
+
+  const { rootItems, folderChildren } = useMemo(() => {
+    const root = [];
+    const childrenByFolder = {};
+    
+    notes.forEach(note => {
+      if (note.folderId) {
+        if (!childrenByFolder[note.folderId]) childrenByFolder[note.folderId] = [];
+        childrenByFolder[note.folderId].push(note);
+      } else {
+        root.push(note);
+      }
+    });
+    
+    return { rootItems: root, folderChildren: childrenByFolder };
+  }, [notes]);
 
   // Reset scroll position when opening a different note
   useEffect(() => {
@@ -287,8 +306,10 @@ export default function NexusPage({ params }) {
     setLoading(true);
     let lastActiveId = null;
 
+    const sortedFiles = [...files].sort((a, b) => a.name.localeCompare(b.name));
+
     try {
-      for (const file of files) {
+      for (const file of sortedFiles) {
         if (!file.name.endsWith('.md')) continue;
 
         const text = await file.text();
@@ -429,24 +450,119 @@ export default function NexusPage({ params }) {
     }
   };
 
+  const customCollisionDetection = (args) => {
+    const pointerCollisions = pointerWithin(args);
+    if (pointerCollisions.length > 0) {
+      return pointerCollisions;
+    }
+    return closestCenter(args);
+  };
+
+  const handleDragStart = (event) => {
+    setActiveDragId(event.active.id);
+  };
+
   const handleDragEnd = async (event) => {
+    setActiveDragId(null);
     const { active, over } = event;
+    if (!over) return;
     
-    if (active.id !== over.id) {
-      const oldIndex = notes.findIndex((n) => n.id === active.id);
-      const newIndex = notes.findIndex((n) => n.id === over.id);
+    const activeNote = notes.find(n => n.id === active.id);
+    if (!activeNote) return;
+
+    let targetId = over.id.toString();
+    let action = 'group';
+
+    if (targetId.startsWith('above-')) {
+      targetId = targetId.replace('above-', '');
+      action = 'above';
+    } else if (targetId.startsWith('below-')) {
+      targetId = targetId.replace('below-', '');
+      action = 'below';
+    } else if (targetId.startsWith('group-')) {
+      targetId = targetId.replace('group-', '');
+      action = 'group';
+    } else {
+      return;
+    }
+
+    if (active.id === targetId) return;
+
+    const targetNote = notes.find(n => n.id === targetId);
+    if (!targetNote) return;
+
+    // Cycle check: Prevent moving a folder into itself or its descendants
+    if (activeNote.isFolder) {
+      let currentParentId = targetNote.folderId;
+      while (currentParentId) {
+        if (currentParentId === activeNote.id) {
+          alert("Cannot move a folder into its own sub-folder.");
+          return;
+        }
+        const parentNote = notes.find(n => n.id === currentParentId);
+        currentParentId = parentNote ? parentNote.folderId : null;
+      }
       
-      const newNotes = arrayMove(notes, oldIndex, newIndex);
-      setNotes(newNotes);
+      // Also prevent grouping a folder into anything
+      if (action === 'group') {
+        alert("You cannot group a folder. You can place it above or below other items.");
+        return;
+      }
+    }
+
+    if (action === 'above' || action === 'below') {
+      const parentFolderId = targetNote.folderId || null;
+      const siblings = parentFolderId ? [...(folderChildren[parentFolderId] || [])] : [...rootItems];
       
-      // Update all changed orders in Firestore
-      try {
-        const batchUpdate = newNotes.map((note, index) => 
-          updateDoc(doc(db, "notes", note.id), { order: index })
+      const targetIndex = siblings.findIndex(n => n.id === targetId);
+      if (targetIndex === -1) return;
+      
+      let insertIndex = action === 'above' ? targetIndex : targetIndex + 1;
+      
+      if (activeNote.folderId === parentFolderId) {
+        const activeIndex = siblings.findIndex(n => n.id === active.id);
+        if (activeIndex < insertIndex) insertIndex -= 1;
+        
+        siblings.splice(activeIndex, 1);
+        siblings.splice(insertIndex, 0, activeNote);
+        
+        const batchUpdate = siblings.map((note, idx) => 
+          updateDoc(doc(db, "notes", note.id), { order: idx })
         );
         await Promise.all(batchUpdate);
-      } catch (err) {
-        console.error("Error reordering notes:", err);
+      } else {
+        siblings.splice(insertIndex, 0, activeNote);
+        const batchUpdate = siblings.map((note, idx) => 
+          updateDoc(doc(db, "notes", note.id), { order: idx })
+        );
+        batchUpdate.push(updateDoc(doc(db, "notes", activeNote.id), { folderId: parentFolderId }));
+        await Promise.all(batchUpdate);
+      }
+      return;
+    }
+
+    if (action === 'group') {
+      if (targetNote.isFolder) {
+        const newOrder = folderChildren[targetNote.id] ? folderChildren[targetNote.id].length : 0;
+        await updateDoc(doc(db, "notes", activeNote.id), {
+          folderId: targetNote.id,
+          order: newOrder
+        });
+      } else {
+        const newFolderRef = await addDoc(collection(db, "notes"), {
+          nexusId,
+          isFolder: true,
+          title: "New Folder",
+          order: targetNote.order !== undefined ? targetNote.order : notes.length,
+          folderId: targetNote.folderId || null,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        
+        await Promise.all([
+          updateDoc(doc(db, "notes", activeNote.id), { folderId: newFolderRef.id, order: 1 }),
+          updateDoc(doc(db, "notes", targetNote.id), { folderId: newFolderRef.id, order: 0 })
+        ]);
       }
     }
   };
@@ -575,6 +691,73 @@ export default function NexusPage({ params }) {
     );
   }
 
+  const renderTree = (items, depth = 0) => {
+    return items.map(item => (
+      <DraggableNode 
+        key={item.id} 
+        id={item.id} 
+        isOwner={isOwner} 
+        isDragging={activeDragId === item.id}
+        depth={depth}
+      >
+        {item.isFolder ? (
+          <TreeFolderItem
+            folder={item}
+            isOwner={isOwner}
+            activeNoteId={activeNoteId}
+            isSelected={activeNoteId === item.id}
+            onSelect={setActiveNoteId}
+            onDelete={async (id) => {
+              setConfirmConfig({
+                title: "Delete Folder",
+                message: "Are you sure you want to permanently delete this folder AND all notes inside it?",
+                onConfirm: async () => {
+                  const deleteRecursive = async (folderId) => {
+                    const children = folderChildren[folderId] || [];
+                    let batch = [deleteDoc(doc(db, "notes", folderId))];
+                    let imgs = [];
+                    for (const child of children) {
+                      if (child.isFolder) {
+                        const { batch: subBatch, imgs: subImgs } = await deleteRecursive(child.id);
+                        batch = [...batch, ...subBatch];
+                        imgs = [...imgs, ...subImgs];
+                      } else {
+                        batch.push(deleteDoc(doc(db, "notes", child.id)));
+                        if (child.images) imgs = [...imgs, ...child.images];
+                      }
+                    }
+                    return { batch, imgs };
+                  };
+                  
+                  const { batch, imgs } = await deleteRecursive(id);
+                  await Promise.all(batch);
+                  checkAndDeleteOrphanedImages(imgs);
+                  if (activeNoteId === id) setActiveNoteId(null);
+                }
+              });
+            }}
+            onRename={async (id, newTitle) => {
+              await updateDoc(doc(db, "notes", id), { title: newTitle });
+            }}
+            childrenContent={
+              folderChildren[item.id] && folderChildren[item.id].length > 0 
+                ? renderTree(folderChildren[item.id], depth + 1)
+                : null
+            }
+          />
+        ) : (
+          <TreeNoteItem
+            note={item}
+            isOwner={isOwner}
+            isSelected={activeNoteId === item.id}
+            onSelect={setActiveNoteId}
+            onDelete={handleDeleteNote}
+          />
+        )}
+      </DraggableNode>
+    ));
+  };
+
   return (
     <div className="flex h-screen bg-background overflow-hidden animate-fade-in-up">
       
@@ -644,19 +827,16 @@ export default function NexusPage({ params }) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-1">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={notes} strategy={verticalListSortingStrategy}>
-              {notes.map((note) => (
-                <SortableNoteItem
-                  key={note.id}
-                  note={note}
-                  isOwner={isOwner}
-                  isSelected={activeNoteId === note.id}
-                  onSelect={setActiveNoteId}
-                  onDelete={handleDeleteNote}
-                />
-              ))}
-            </SortableContext>
+          <DndContext sensors={sensors} collisionDetection={customCollisionDetection} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            {renderTree(rootItems)}
+            
+            <DragOverlay dropAnimation={null}>
+              {activeDragId ? (
+                <div className="bg-card border shadow-md rounded opacity-50 p-2 text-sm truncate font-medium z-50 cursor-grabbing border-primary-500 max-w-[200px]">
+                  {notes.find(n => n.id === activeDragId)?.title}
+                </div>
+              ) : null}
+            </DragOverlay>
           </DndContext>
           
           {notes.length === 0 && (
@@ -732,17 +912,41 @@ export default function NexusPage({ params }) {
                 </div>
               </header>
               
-              {/* Left Side: Milkdown Live Preview Editor */}
+              {/* Left Side: Milkdown Live Preview Editor OR Folder Grid */}
               <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-background relative flex flex-col items-center">
                 <div className="w-full max-w-[800px] mt-8 flex-1 flex flex-col">
-                  <MilkdownEditor 
-                    key={isOwner ? `${activeNote.id}-${editorKeySuffix}` : `${activeNote.id}-${activeNote.updatedAt?.toMillis() || 'viewer'}`}
-                    initialContent={activeNote.content || ""} 
-                    onChange={saveContent} 
-                    isEditable={isOwner}
-                    onSelectionChange={handleSelectionChange}
-                    remoteCursor={remoteCursor}
-                  />
+                  {activeNote.isFolder ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 w-full">
+                      {(folderChildren[activeNote.id] || []).map(child => (
+                        <div 
+                          key={child.id}
+                          onClick={() => setActiveNoteId(child.id)}
+                          className="flex flex-col items-center justify-center p-6 bg-card border border-border rounded-xl hover:border-primary-500 hover:shadow-lg transition-all cursor-pointer group"
+                        >
+                          {child.isFolder ? (
+                            <Folder className="w-12 h-12 text-primary-500 mb-3 group-hover:scale-110 transition-transform" />
+                          ) : (
+                            <FileText className="w-12 h-12 text-foreground/40 mb-3 group-hover:scale-110 transition-transform group-hover:text-primary-500" />
+                          )}
+                          <span className="font-medium text-center line-clamp-2">{child.title}</span>
+                        </div>
+                      ))}
+                      {(!folderChildren[activeNote.id] || folderChildren[activeNote.id].length === 0) && (
+                        <div className="col-span-full text-center py-12 text-foreground/40">
+                          <p>This folder is empty.</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <MilkdownEditor 
+                      key={isOwner ? `${activeNote.id}-${editorKeySuffix}` : `${activeNote.id}-${activeNote.updatedAt?.toMillis() || 'viewer'}`}
+                      initialContent={activeNote.content || ""} 
+                      onChange={saveContent} 
+                      isEditable={isOwner}
+                      onSelectionChange={handleSelectionChange}
+                      remoteCursor={remoteCursor}
+                    />
+                  )}
                 </div>
               </div>
             </div>
