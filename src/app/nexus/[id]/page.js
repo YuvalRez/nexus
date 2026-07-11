@@ -348,24 +348,103 @@ export default function NexusPage({ params }) {
     }
   };
 
-  const uploadFiles = async (files) => {
-    if (!isOwner || files.length === 0) return;
+  const getAllFileEntries = async (dataTransferItemList) => {
+    let fileEntries = [];
+    let queue = [];
+    
+    for (let i = 0; i < dataTransferItemList.length; i++) {
+      const item = dataTransferItemList[i];
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry();
+        if (entry) queue.push(entry);
+      }
+    }
+
+    while (queue.length > 0) {
+      let entry = queue.shift();
+      if (!entry) continue;
+
+      if (entry.isFile) {
+        if (entry.name.endsWith('.md')) {
+          const file = await new Promise((resolve) => entry.file(resolve));
+          fileEntries.push({
+            file: file,
+            path: entry.fullPath // e.g. /FolderA/SubfolderB/note.md
+          });
+        }
+      } else if (entry.isDirectory) {
+        const reader = entry.createReader();
+        const entries = await new Promise((resolve) => {
+          let allEntries = [];
+          const readEntries = () => {
+            reader.readEntries((res) => {
+              if (res.length) {
+                allEntries = allEntries.concat(res);
+                readEntries();
+              } else {
+                resolve(allEntries);
+              }
+            });
+          };
+          readEntries();
+        });
+        queue.push(...entries);
+      }
+    }
+    return fileEntries;
+  };
+
+  const uploadFiles = async (filesWithPath) => {
+    if (!isOwner || filesWithPath.length === 0) return;
     setLoading(true);
     let lastActiveId = null;
 
-    const sortedFiles = [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+    const folderCache = {}; 
+    const sortedFiles = [...filesWithPath].sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true, sensitivity: 'base' }));
     
-    // Calculate the current max order in the root list
     let currentMaxOrder = notes.reduce((max, n) => Math.max(max, (n.order !== undefined ? n.order : 0)), -1);
 
     try {
-      for (const file of sortedFiles) {
-        if (!file.name.endsWith('.md')) continue;
-
+      for (const item of sortedFiles) {
+        const file = item.file;
         const text = await file.text();
         const title = file.name.replace('.md', '');
         
-        const existingNote = notes.find(n => n.title.toLowerCase() === title.toLowerCase());
+        const pathParts = item.path.replace(/^\//, '').split('/');
+        
+        let currentFolderId = null;
+        let currentPathAcc = "";
+
+        for (let i = 0; i < pathParts.length - 1; i++) {
+          const folderName = pathParts[i];
+          currentPathAcc += `/${folderName}`;
+          
+          if (folderCache[currentPathAcc]) {
+            currentFolderId = folderCache[currentPathAcc];
+          } else {
+            const existingFolder = notes.find(n => n.isFolder && n.title === folderName && n.folderId === currentFolderId);
+            
+            if (existingFolder) {
+              currentFolderId = existingFolder.id;
+              folderCache[currentPathAcc] = currentFolderId;
+            } else {
+              currentMaxOrder++;
+              const folderRef = await addDoc(collection(db, "notes"), {
+                nexusId,
+                title: folderName,
+                isFolder: true,
+                folderId: currentFolderId,
+                order: currentMaxOrder,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              });
+              currentFolderId = folderRef.id;
+              folderCache[currentPathAcc] = currentFolderId;
+            }
+          }
+        }
+
+        const existingNote = notes.find(n => !n.isFolder && n.title.toLowerCase() === title.toLowerCase() && n.folderId === currentFolderId);
 
         if (existingNote) {
           await updateDoc(doc(db, "notes", existingNote.id), {
@@ -379,6 +458,8 @@ export default function NexusPage({ params }) {
             nexusId,
             title,
             content: text,
+            isFolder: false,
+            folderId: currentFolderId,
             order: currentMaxOrder,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
@@ -389,9 +470,6 @@ export default function NexusPage({ params }) {
       
       await updateDoc(doc(db, "nexuses", nexusId), { updatedAt: serverTimestamp() });
       if (lastActiveId) setActiveNoteId(lastActiveId);
-      
-      // Force Tiptap Editor to fully remount with the newly uploaded content
-      // by appending this incrementing suffix to its React key!
       setEditorKeySuffix(prev => prev + 1);
     } catch (err) {
       console.error("Error uploading notes:", err);
@@ -403,7 +481,11 @@ export default function NexusPage({ params }) {
   };
 
   const handleFileUpload = (e) => {
-    uploadFiles(Array.from(e.target.files));
+    const files = Array.from(e.target.files).filter(f => f.name.endsWith(".md"));
+    uploadFiles(files.map(f => ({ 
+      file: f, 
+      path: f.webkitRelativePath ? `/${f.webkitRelativePath}` : `/${f.name}` 
+    })));
   };
 
   const handleMdDragOver = (e) => {
@@ -425,11 +507,16 @@ export default function NexusPage({ params }) {
     setIsDraggingMd(false);
     if (!isOwner) return;
 
-    const files = Array.from(e.dataTransfer.files);
-    const markdownFiles = files.filter(f => f.name.endsWith(".md"));
-
-    if (markdownFiles.length > 0) {
-      uploadFiles(markdownFiles);
+    if (e.dataTransfer.items) {
+      const filesWithPath = await getAllFileEntries(e.dataTransfer.items);
+      if (filesWithPath.length > 0) {
+        uploadFiles(filesWithPath);
+      }
+    } else {
+      const files = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith(".md"));
+      if (files.length > 0) {
+        uploadFiles(files.map(f => ({ file: f, path: `/${f.name}` })));
+      }
     }
   };
 
