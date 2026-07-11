@@ -43,8 +43,19 @@ export async function uploadImageWithDeduplication(file) {
     });
     
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || "Failed to upload to Cloudinary");
+      let errorMessage = "Failed to upload to Cloudinary";
+      if (response.status === 413) {
+        errorMessage = "File is too large. Please upload an image smaller than 4MB.";
+      } else {
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } else {
+          errorMessage = await response.text() || response.statusText;
+        }
+      }
+      throw new Error(errorMessage);
     }
     
     const data = await response.json();
