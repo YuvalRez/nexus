@@ -7,7 +7,7 @@ import { doc, getDoc, getDocs, collection, query, where, onSnapshot, addDoc, ser
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
-import { Edit2, ArrowLeft, Users, File, Lock, FileUp, BookOpen, Save, Trash2, PlusCircle, ChevronLeft, ChevronRight, X, PanelRightClose, PanelRightOpen, RotateCcw, Folder, FileText } from "lucide-react";
+import { Edit2, ArrowLeft, Users, File, Lock, FileUp, BookOpen, Save, Trash2, PlusCircle, ChevronLeft, ChevronRight, X, PanelRightClose, PanelRightOpen, RotateCcw, Folder, FileText, FolderPlus } from "lucide-react";
 import Link from "next/link";
 import { DndContext, closestCenter, pointerWithin, KeyboardSensor, PointerSensor, useSensor, useSensors, DragOverlay } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, rectSortingStrategy } from '@dnd-kit/sortable';
@@ -66,6 +66,7 @@ export default function NexusPage({ params }) {
   const [isResizing, setIsResizing] = useState(false);
   
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isNewMenuOpen, setIsNewMenuOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState(null);
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
@@ -500,6 +501,24 @@ export default function NexusPage({ params }) {
     }
   };
 
+  const handleCreateFolder = async () => {
+    if (!isOwner) return;
+    try {
+      let currentMaxOrder = notes.reduce((max, n) => Math.max(max, (n.order !== undefined ? n.order : 0)), -1);
+      const docRef = await addDoc(collection(db, "notes"), {
+        nexusId,
+        title: "New Folder",
+        isFolder: true,
+        order: currentMaxOrder + 1,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setActiveNoteId(docRef.id);
+    } catch (err) {
+      console.error("Failed to create folder:", err);
+    }
+  };
+
   const customCollisionDetection = (args) => {
     const pointerCollisions = pointerWithin(args);
     if (pointerCollisions.length > 0) {
@@ -925,18 +944,50 @@ export default function NexusPage({ params }) {
               onChange={handleFileUpload}
               className="hidden"
             />
-            <button
-              onClick={handleCreateNote}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-primary-600 text-white font-medium rounded-xl hover:bg-primary-700 transition-all shadow-sm"
-              title="New Note"
-            >
-              <Edit2 className="w-4 h-4" />
-              New
-            </button>
+            <div className="flex-1 relative">
+              <button
+                onClick={() => setIsNewMenuOpen(!isNewMenuOpen)}
+                className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-primary-600 text-white text-sm font-medium rounded-xl hover:bg-primary-700 transition-all shadow-sm"
+              >
+                <PlusCircle className="w-4 h-4" />
+                New
+              </button>
+              
+              {isNewMenuOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsNewMenuOpen(false);
+                    }} 
+                  />
+                  <div className="absolute bottom-full left-0 mb-2 w-48 bg-card border border-border rounded-xl shadow-xl overflow-hidden animate-fade-in-up z-50">
+                  <button
+                    onClick={() => {
+                      setIsNewMenuOpen(false);
+                      handleCreateNote();
+                    }}
+                    className="w-full flex items-center gap-2 p-3 hover:bg-foreground/5 transition-colors text-sm font-medium"
+                  >
+                    <FileText className="w-4 h-4 text-primary-500" /> New Note
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsNewMenuOpen(false);
+                      handleCreateFolder();
+                    }}
+                    className="w-full flex items-center gap-2 p-3 hover:bg-foreground/5 transition-colors text-sm font-medium border-t border-border"
+                  >
+                    <FolderPlus className="w-4 h-4 text-primary-500" /> New Folder
+                  </button>
+                </div>
+                </>
+              )}
+            </div>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-primary-600/10 text-primary-500 border border-primary-500/20 font-medium rounded-xl hover:bg-primary-500 hover:text-white transition-all"
-              title="Upload Markdown"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-foreground/5 text-foreground/70 border border-border text-sm font-medium rounded-xl hover:bg-foreground/10 hover:text-foreground transition-all"
             >
               <FileUp className="w-4 h-4" />
               Upload
