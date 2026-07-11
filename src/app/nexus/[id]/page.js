@@ -306,7 +306,10 @@ export default function NexusPage({ params }) {
     setLoading(true);
     let lastActiveId = null;
 
-    const sortedFiles = [...files].sort((a, b) => a.name.localeCompare(b.name));
+    const sortedFiles = [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+    
+    // Calculate the current max order in the root list
+    let currentMaxOrder = notes.reduce((max, n) => Math.max(max, (n.order !== undefined ? n.order : 0)), -1);
 
     try {
       for (const file of sortedFiles) {
@@ -324,11 +327,12 @@ export default function NexusPage({ params }) {
           });
           lastActiveId = existingNote.id;
         } else {
+          currentMaxOrder++;
           const docRef = await addDoc(collection(db, "notes"), {
             nexusId,
             title,
             content: text,
-            order: notes.length, // Could use existing max order + 1, but notes.length works roughly
+            order: currentMaxOrder,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
