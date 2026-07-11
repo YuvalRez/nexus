@@ -667,6 +667,24 @@ export default function NexusPage({ params }) {
     }
   };
 
+  // Handle keyboard navigation for zoomed image
+  useEffect(() => {
+    if (zoomedImageIndex === null || !activeNote || !activeNote.images) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'ArrowLeft') {
+        setZoomedImageIndex(prev => prev > 0 ? prev - 1 : activeNote.images.length - 1);
+      } else if (e.key === 'ArrowRight') {
+        setZoomedImageIndex(prev => prev < activeNote.images.length - 1 ? prev + 1 : 0);
+      } else if (e.key === 'Escape') {
+        setZoomedImageIndex(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [zoomedImageIndex, activeNote]);
+
   if (loading && !nexus) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -1086,7 +1104,7 @@ export default function NexusPage({ params }) {
         >
           {/* Previous Area (Left Bar) */}
           <div 
-            className="absolute left-0 top-0 bottom-0 w-24 sm:w-32 flex items-center justify-start pl-4 sm:pl-8 group cursor-pointer"
+            className="absolute left-0 top-0 bottom-0 w-24 sm:w-32 flex items-center justify-start pl-4 sm:pl-8 group cursor-pointer z-50"
             onClick={(e) => {
               e.stopPropagation();
               setZoomedImageIndex(prev => prev > 0 ? prev - 1 : activeNote.images.length - 1);
@@ -1099,7 +1117,7 @@ export default function NexusPage({ params }) {
 
           {/* Next Area (Right Bar) */}
           <div 
-            className="absolute right-0 top-0 bottom-0 w-24 sm:w-32 flex items-center justify-end pr-4 sm:pr-8 group cursor-pointer"
+            className="absolute right-0 top-0 bottom-0 w-24 sm:w-32 flex items-center justify-end pr-4 sm:pr-8 group cursor-pointer z-50"
             onClick={(e) => {
               e.stopPropagation();
               setZoomedImageIndex(prev => prev < activeNote.images.length - 1 ? prev + 1 : 0);
