@@ -1401,7 +1401,7 @@ export default function NexusPage({ params }) {
 
           {/* Close Button */}
           <button 
-            className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors bg-black/20 hover:bg-black/40 p-2 rounded-full"
+            className="absolute top-6 right-6 z-[60] text-white/50 hover:text-white transition-colors bg-black/20 hover:bg-black/40 p-2 rounded-full"
             onClick={(e) => {
               e.stopPropagation();
               setZoomedImageIndex(null);
