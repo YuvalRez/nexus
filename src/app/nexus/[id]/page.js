@@ -404,6 +404,14 @@ export default function NexusPage({ params }) {
     
     let currentMaxOrder = notes.reduce((max, n) => Math.max(max, (n.order !== undefined ? n.order : 0)), -1);
 
+    let targetFolderId = null;
+    if (activeNoteId) {
+      const activeItem = notes.find(n => n.id === activeNoteId);
+      if (activeItem) {
+        targetFolderId = activeItem.isFolder ? activeItem.id : (activeItem.folderId || null);
+      }
+    }
+
     try {
       for (const item of sortedFiles) {
         const file = item.file;
@@ -412,7 +420,7 @@ export default function NexusPage({ params }) {
         
         const pathParts = item.path.replace(/^\//, '').split('/');
         
-        let currentFolderId = null;
+        let currentFolderId = targetFolderId;
         let currentPathAcc = "";
 
         for (let i = 0; i < pathParts.length - 1; i++) {
@@ -570,12 +578,23 @@ export default function NexusPage({ params }) {
 
   const handleCreateNote = async () => {
     if (!isOwner) return;
+    
+    let targetFolderId = null;
+    if (activeNoteId) {
+      const activeItem = notes.find(n => n.id === activeNoteId);
+      if (activeItem) {
+        targetFolderId = activeItem.isFolder ? activeItem.id : (activeItem.folderId || null);
+      }
+    }
+    
     try {
       const docRef = await addDoc(collection(db, "notes"), {
         nexusId,
         title: "Untitled Note",
         content: "",
         images: [],
+        isFolder: false,
+        folderId: targetFolderId,
         order: notes.length,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -590,12 +609,22 @@ export default function NexusPage({ params }) {
 
   const handleCreateFolder = async () => {
     if (!isOwner) return;
+    
+    let targetFolderId = null;
+    if (activeNoteId) {
+      const activeItem = notes.find(n => n.id === activeNoteId);
+      if (activeItem) {
+        targetFolderId = activeItem.isFolder ? activeItem.id : (activeItem.folderId || null);
+      }
+    }
+    
     try {
       let currentMaxOrder = notes.reduce((max, n) => Math.max(max, (n.order !== undefined ? n.order : 0)), -1);
       const docRef = await addDoc(collection(db, "notes"), {
         nexusId,
         title: "New Folder",
         isFolder: true,
+        folderId: targetFolderId,
         order: currentMaxOrder + 1,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
