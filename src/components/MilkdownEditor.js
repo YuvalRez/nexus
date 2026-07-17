@@ -265,8 +265,13 @@ const tabKeymapPlugin = $prose(() => keymap({
       
       // Iterate backwards to not invalidate positions
       for (let i = blocksToIndent.length - 1; i >= 0; i--) {
-        const { pos } = blocksToIndent[i];
-        tr = tr.insertText("    ", pos + 1);
+        const { node, pos } = blocksToIndent[i];
+        const text = node.textContent;
+        if (text.startsWith('\u200B')) {
+          tr = tr.insertText("    ", pos + 2);
+        } else {
+          tr = tr.insertText("    ", pos + 1);
+        }
       }
       
       dispatch(tr.scrollIntoView());
@@ -295,9 +300,10 @@ const tabKeymapPlugin = $prose(() => keymap({
       for (let i = blocksToOutdent.length - 1; i >= 0; i--) {
         const { node, pos } = blocksToOutdent[i];
         const text = node.textContent;
-        const match = text.match(/^( {1,4})/);
+        const startIdx = text.startsWith('\u200B') ? 1 : 0;
+        const match = text.substring(startIdx).match(/^( {1,4})/);
         if (match) {
-          tr = tr.delete(pos + 1, pos + 1 + match[1].length);
+          tr = tr.delete(pos + 1 + startIdx, pos + 1 + startIdx + match[1].length);
         }
       }
       
@@ -521,12 +527,17 @@ function buildIndentDecorations(doc) {
           class: 'space-indented-paragraph'
         }));
         
-        // Add vertical lines
-        for (let i = 1; i <= level; i++) {
-          const widget = document.createElement('span');
-          widget.className = 'indent-guide-line';
-          widget.style.left = `${(i - 0.5) * 1.5}rem`; // Center the line in the padding step
-          decorations.push(Decoration.widget(pos + 1, widget));
+        // Determine if this line is a checkbox
+        const isCheckbox = text.match(/^\u200B[ \t]*[-*]\s\[[ xX]\]\s/);
+        
+        // Add vertical lines (only if it's not a checkbox)
+        if (!isCheckbox) {
+          for (let i = 1; i <= level; i++) {
+            const widget = document.createElement('span');
+            widget.className = 'indent-guide-line';
+            widget.style.left = `${(i - 0.5) * 1.5}rem`; // Center the line in the padding step
+            decorations.push(Decoration.widget(pos + 1, widget));
+          }
         }
       }
     }
