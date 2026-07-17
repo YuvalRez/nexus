@@ -577,8 +577,20 @@ const selectionBroadcastPlugin = $prose(() => new Plugin({
 function preserveIndentationAndSyntax(markdown) {
   if (!markdown) return markdown;
   let lines = markdown.split('\n');
+  let newLines = [];
+  
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
+    
+    // Convert empty lines into zero-width space paragraphs so they render visually
+    if (line.trim() === '') {
+      if (newLines.length > 0 && newLines[newLines.length - 1] !== '') {
+        newLines.push('');
+      }
+      newLines.push('\u200B');
+      newLines.push('');
+      continue;
+    }
     
     const match = line.match(/^([ \t]+)(.*)/);
     if (match) {
@@ -586,35 +598,36 @@ function preserveIndentationAndSyntax(markdown) {
       line = '\u200B' + spaces + match[2];
     }
     
-    let newLine = '';
+    let newLineStr = '';
     for (let j = 0; j < line.length; j++) {
       if ((line[j] === '*' || line[j] === '_') && (line[j+1] === ' ' || line[j+1] === '\t')) {
         const prefix = line.slice(0, j);
         if (prefix.trim() === '' || prefix.trim() === '\u200B') {
-          newLine += line[j];
+          newLineStr += line[j];
           continue;
         }
       }
       
       if (line[j] === '*' || line[j] === '_') {
-        newLine += '\\' + line[j];
+        newLineStr += '\\' + line[j];
       } else {
-        newLine += line[j];
+        newLineStr += line[j];
       }
     }
-    lines[i] = newLine;
+    line = newLineStr;
     
-    const listMatch = lines[i].match(/^(\u200B?[ \t]*)([-*])\s(.*)/);
+    // Ensure uploaded lists parse properly
+    const listMatch = line.match(/^(\u200B?[ \t]*)([-*])\s(.*)/);
     if (listMatch) {
-       lines[i] = `${listMatch[1]}\\${listMatch[2]} ${listMatch[3]}`;
+       line = `${listMatch[1]}\\${listMatch[2]} ${listMatch[3]}`;
        
-       if (i > 0 && lines[i-1].trim() !== '') {
-          lines.splice(i, 0, '');
-          i++; // Skip the newly inserted blank line
+       if (newLines.length > 0 && newLines[newLines.length - 1].trim() !== '') {
+          newLines.push('');
        }
     }
+    newLines.push(line);
   }
-  return lines.join('\n');
+  return newLines.join('\n');
 }
 
 function preserveSoftBreaks(markdown) {
@@ -631,13 +644,19 @@ function preserveSoftBreaks(markdown) {
       continue;
     }
     
+    // Treat a zero-width space line as an intentional paragraph break
+    if (trimmed === '\u200B') {
+      continue;
+    }
+    
     if (!inCodeBlock) {
       // If line is not empty and doesn't already have a valid Markdown hard break
       if (line.length > 0 && !line.endsWith('  ') && !line.endsWith('<br>') && !line.endsWith('\\')) {
         if (i + 1 < lines.length) {
           const nextTrimmed = lines[i + 1].trim();
-          // If next line is a paragraph continuation (not empty, not a list item, etc.)
+          // If next line is a paragraph continuation (not empty, not a list item, not a zero-width space, etc.)
           if (nextTrimmed.length > 0 && 
+              nextTrimmed !== '\u200B' &&
               !nextTrimmed.startsWith('- ') && 
               !nextTrimmed.startsWith('* ') && 
               !nextTrimmed.match(/^\d+\.\s/)) {
