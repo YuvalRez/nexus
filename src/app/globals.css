@@ -333,3 +333,104 @@
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
+/* Custom Interactive Task Lists */
+.task-markdown-hidden {
+  opacity: 0;
+  display: inline-block;
+  width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+  vertical-align: text-bottom;
+}
+.task-done-strikethrough,
+.task-done-strikethrough * {
+  text-decoration: line-through !important;
+  opacity: 0.6 !important;
+}
+/* Hide bullet points for task lists */
+.prose li:has(> .task-list-paragraph),
+.prose li.task-list-item {
+  list-style-type: none !important;
+}
+.prose li:has(> .task-list-paragraph)::marker,
+.prose li.task-list-item::marker {
+  content: '' !important;
+  display: none !important;
+}
+.prose li:has(> .task-list-paragraph) {
+  padding-left: 0.1rem; /* Adjust padding since marker is gone */
+}
+
+/* Custom Text-Based Bullet Points */
+.bullet-markdown-hidden {
+  opacity: 0;
+  display: inline-block;
+  width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+  vertical-align: text-bottom;
+}
+.custom-bullet-widget {
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  background-color: var(--color-foreground);
+  border-radius: 50%;
+  margin-right: 0.5rem; /* Reduced to compensate for the visible trailing space */
+  vertical-align: middle;
+  opacity: 0.8;
+}
+.bullet-list-paragraph {
+  position: relative;
+  /* Hanging indent for wrapped text: */
+  padding-left: 1.15rem;
+  text-indent: -1.15rem;
+}
+
+/* Premium Animated Checkbox */
+.custom-task-checkbox {
+  appearance: none;
+  background-color: transparent;
+  margin: 0;
+  font: inherit;
+  color: currentColor;
+  width: 1.2em;
+  height: 1.2em;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  border-radius: 0.25em;
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  margin-right: 0.35rem; /* Reduced to compensate for the visible trailing space */
+  vertical-align: text-bottom;
+  position: relative;
+  top: 0.1em;
+}
+
+.custom-task-checkbox:hover {
+  border-color: var(--color-primary-400);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.custom-task-checkbox::before {
+  content: "";
+  width: 0.7em;
+  height: 0.7em;
+  transform: scale(0);
+  box-shadow: inset 1em 1em var(--color-primary-500);
+  background-color: var(--color-primary-500);
+  transform-origin: center;
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+
+.custom-task-checkbox:checked {
+  border-color: var(--color-primary-500);
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+.custom-task-checkbox:checked::before {
+  transform: scale(1);
+}
+

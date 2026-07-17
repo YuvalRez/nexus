@@ -5,9 +5,15 @@ import { Editor, rootCtx, defaultValueCtx, editorViewOptionsCtx } from '@milkdow
 import { 
   commonmark, 
   strongAttr, strongSchema, strongInputRule, strongKeymap, toggleStrongCommand,
-  emphasisAttr, emphasisSchema, emphasisStarInputRule, emphasisUnderscoreInputRule, emphasisKeymap, toggleEmphasisCommand
+  emphasisAttr, emphasisSchema, emphasisStarInputRule, emphasisUnderscoreInputRule, emphasisKeymap, toggleEmphasisCommand,
+  bulletListAttr, bulletListSchema, wrapInBulletListInputRule, bulletListKeymap, wrapInBulletListCommand,
+  orderedListAttr, orderedListSchema, wrapInOrderedListInputRule, orderedListKeymap, wrapInOrderedListCommand,
+  listItemAttr, listItemSchema, listItemKeymap, splitListItemCommand, sinkListItemCommand, liftListItemCommand, liftFirstListItemCommand
 } from '@milkdown/preset-commonmark';
-import { gfm } from '@milkdown/preset-gfm';
+import { 
+  gfm, 
+  extendListItemSchemaForTask, wrapInTaskListInputRule
+} from '@milkdown/preset-gfm';
 import { history } from '@milkdown/plugin-history';
 import { Milkdown, MilkdownProvider, useEditor } from '@milkdown/react';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
@@ -19,10 +25,225 @@ import { $prose, $remark } from '@milkdown/utils';
 import remarkBreaks from 'remark-breaks';
 import '@milkdown/theme-nord/style.css'; // Minimal default styling
 
+const taskListKey = new PluginKey('customTaskList');
+
+const taskListMilkdownPlugin = $prose(() => new Plugin({
+  key: taskListKey,
+  state: {
+    init(_, { doc }) {
+      return { decos: buildTaskDecorations(doc, null, false), isFocusedView: false };
+    },
+    apply(tr, old, oldState, newState) {
+      let isFocusedView = old.isFocusedView;
+      const meta = tr.getMeta(taskListKey);
+      if (meta !== undefined) {
+        isFocusedView = meta;
+      }
+      return {
+        decos: buildTaskDecorations(newState.doc, newState.selection, isFocusedView),
+        isFocusedView
+      };
+    }
+  },
+  props: {
+    decorations(state) {
+      return this.getState(state).decos;
+    },
+    handleDOMEvents: {
+      focus: (view) => {
+        view.dispatch(view.state.tr.setMeta(taskListKey, true));
+        return false;
+      },
+      blur: (view) => {
+        view.dispatch(view.state.tr.setMeta(taskListKey, false));
+        return false;
+      },
+      mousedown: (view, event) => {
+        if (event.target.classList.contains('custom-task-checkbox')) {
+          event.preventDefault();
+          const pos = Number(event.target.getAttribute('data-pos'));
+          const matchText = event.target.getAttribute('data-match');
+          const wasChecked = event.target.getAttribute('data-checked') === 'true';
+          
+          const newText = wasChecked 
+            ? matchText.replace(/\[[xX]\]/, '[ ]') 
+            : matchText.replace(/\[ \]/, '[x]');
+            
+          view.dispatch(view.state.tr.replaceWith(pos, pos + matchText.length, view.state.schema.text(newText)));
+          return true;
+        }
+        return false;
+      }
+    }
+  }
+}));
+
+const bulletListKey = new PluginKey('customBulletList');
+
+const bulletListMilkdownPlugin = $prose(() => new Plugin({
+  key: bulletListKey,
+  state: {
+    init(_, { doc }) {
+      return { decos: buildBulletDecorations(doc, null, false), isFocusedView: false };
+    },
+    apply(tr, old, oldState, newState) {
+      let isFocusedView = old.isFocusedView;
+      const meta = tr.getMeta(bulletListKey);
+      if (meta !== undefined) {
+        isFocusedView = meta;
+      }
+      return {
+        decos: buildBulletDecorations(newState.doc, newState.selection, isFocusedView),
+        isFocusedView
+      };
+    }
+  },
+  props: {
+    decorations(state) {
+      return this.getState(state).decos;
+    },
+    handleDOMEvents: {
+      focus: (view) => {
+        view.dispatch(view.state.tr.setMeta(bulletListKey, true));
+        return false;
+      },
+      blur: (view) => {
+        view.dispatch(view.state.tr.setMeta(bulletListKey, false));
+        return false;
+      }
+    }
+  }
+}));
+
+function buildBulletDecorations(doc, selection, isFocusedView) {
+  const decorations = [];
+  
+  doc.descendants((node, pos) => {
+    if (node.isTextblock) {
+      const text = node.textContent;
+      
+      const match = text.match(/^(\u200B?[ \t]*)([-*]\s)/);
+      if (match) {
+        if (text.match(/^(\u200B?[ \t]*)([-*]\s)\[( |x|X)\]\s/)) return;
+
+        const spacesLen = match[1].length;
+        const startPos = pos + 1 + spacesLen;
+        const matchText = match[2];
+        const matchLen = matchText.length;
+        
+        const isFocused = isFocusedView && selection && 
+          ((selection.from >= startPos && selection.from <= startPos + matchLen - 1) || 
+           (selection.to >= startPos && selection.to <= startPos + matchLen - 1));
+           
+        if (!isFocused) {
+          decorations.push(Decoration.inline(startPos, startPos + matchLen - 1, { class: 'bullet-markdown-hidden' }));
+          
+          const widget = document.createElement('span');
+          widget.className = 'custom-bullet-widget';
+          decorations.push(Decoration.widget(startPos, widget));
+          
+          decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: 'bullet-list-paragraph' }));
+        }
+      }
+    }
+  });
+  
+  return DecorationSet.create(doc, decorations);
+}
+
+function buildTaskDecorations(doc, selection, isFocusedView) {
+  const decorations = [];
+  
+  doc.descendants((node, pos) => {
+    if (node.isTextblock) {
+      const text = node.textContent;
+      const match = text.match(/^(\u200B?[ \t]*)([-*]\s)?\[( |x|X)\]\s/);
+      
+      if (match) {
+        const spacesLen = match[1].length;
+        const startPos = pos + 1 + spacesLen;
+        const matchText = match[0].substring(spacesLen);
+        const matchLen = matchText.length;
+        const isChecked = match[3] === 'x' || match[3] === 'X';
+        
+        const isFocused = isFocusedView && selection && 
+          ((selection.from >= startPos && selection.from <= startPos + matchLen - 1) || 
+           (selection.to >= startPos && selection.to <= startPos + matchLen - 1));
+           
+        if (!isFocused) {
+          decorations.push(Decoration.inline(startPos, startPos + matchLen - 1, { class: 'task-markdown-hidden' }));
+          
+          const widget = document.createElement('input');
+          widget.type = 'checkbox';
+          widget.checked = isChecked;
+          widget.className = 'custom-task-checkbox';
+          widget.setAttribute('data-pos', startPos);
+          widget.setAttribute('data-match', matchText);
+          widget.setAttribute('data-checked', isChecked ? 'true' : 'false');
+          
+          decorations.push(Decoration.widget(startPos, widget));
+          
+          if (isChecked && node.nodeSize > matchLen + spacesLen + 1) {
+             decorations.push(Decoration.inline(startPos + matchLen, pos + node.nodeSize - 1, { class: 'task-done-strikethrough' }));
+          }
+          
+          decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: 'task-list-paragraph' }));
+        }
+      }
+    }
+  });
+  
+  return DecorationSet.create(doc, decorations);
+}
+
 const wikiLinkKey = new PluginKey('wikiLinkHideShow');
 
 // Custom keymap for Tab, Shift-Tab, and Backspace
 const tabKeymapPlugin = $prose(() => keymap({
+  "Enter": (state, dispatch) => {
+    const { $from, empty } = state.selection;
+    if (!empty) return false;
+    
+    if ($from.parent.type.isTextblock) {
+      const text = $from.parent.textContent;
+      const textBeforeCursor = text.substring(0, $from.parentOffset);
+      const textAfterCursor = text.substring($from.parentOffset);
+      
+      const bulletMatch = textBeforeCursor.match(/^(\u200B?[ \t]*)([-*]\s)$/);
+      const taskMatch = textBeforeCursor.match(/^(\u200B?[ \t]*)([-*]\s\[(?: |x|X)\]\s)$/);
+      const match = taskMatch || bulletMatch;
+      
+      if (match) {
+        if (textAfterCursor.trim().length === 0) {
+          if (dispatch) {
+            const tr = state.tr;
+            tr.delete($from.pos - $from.parentOffset, $from.pos);
+            dispatch(tr.scrollIntoView());
+          }
+          return true;
+        }
+      }
+      
+      const anyBulletMatch = textBeforeCursor.match(/^(\u200B?[ \t]*)([-*]\s(?:\[(?: |x|X)\]\s)?)/);
+      if (anyBulletMatch) {
+         if (dispatch) {
+           let prefix = anyBulletMatch[0];
+           prefix = prefix.replace(/\[[xX]\]/, '[ ]');
+           
+           const tr = state.tr;
+           tr.split($from.pos);
+           const newPos = tr.mapping.map($from.pos);
+           tr.insertText(prefix, newPos);
+           
+           const resolvedNewPos = tr.doc.resolve(newPos + prefix.length);
+           tr.setSelection(state.selection.constructor.near(resolvedNewPos));
+           dispatch(tr.scrollIntoView());
+         }
+         return true;
+      }
+    }
+    return false;
+  },
   "Tab": (state, dispatch) => {
     // First, try to indent the list item if we are inside a list
     const listItemType = state.schema.nodes.listItem || state.schema.nodes.list_item;
@@ -360,7 +581,7 @@ function preserveIndentationAndSyntax(markdown) {
     let line = lines[i];
     
     const match = line.match(/^([ \t]+)(.*)/);
-    if (match && !match[2].startsWith('- ') && !match[2].startsWith('* ') && !match[2].match(/^\d+\.\s/)) {
+    if (match) {
       const spaces = match[1].replace(/\t/g, '    ');
       line = '\u200B' + spaces + match[2];
     }
@@ -382,6 +603,16 @@ function preserveIndentationAndSyntax(markdown) {
       }
     }
     lines[i] = newLine;
+    
+    const listMatch = lines[i].match(/^(\u200B?[ \t]*)([-*])\s(.*)/);
+    if (listMatch) {
+       lines[i] = `${listMatch[1]}\\${listMatch[2]} ${listMatch[3]}`;
+       
+       if (i > 0 && lines[i-1].trim() !== '') {
+          lines.splice(i, 0, '');
+          i++; // Skip the newly inserted blank line
+       }
+    }
   }
   return lines.join('\n');
 }
@@ -493,13 +724,19 @@ const MilkdownEditorContent = ({ initialContent, onChange, isEditable, onSelecti
       })
       .use(commonmark.filter(plugin => {
         return plugin !== strongAttr && plugin !== strongSchema && plugin !== strongInputRule && plugin !== strongKeymap && plugin !== toggleStrongCommand &&
-               plugin !== emphasisAttr && plugin !== emphasisSchema && plugin !== emphasisStarInputRule && plugin !== emphasisUnderscoreInputRule && plugin !== emphasisKeymap && plugin !== toggleEmphasisCommand;
+               plugin !== emphasisAttr && plugin !== emphasisSchema && plugin !== emphasisStarInputRule && plugin !== emphasisUnderscoreInputRule && plugin !== emphasisKeymap && plugin !== toggleEmphasisCommand &&
+               plugin !== wrapInBulletListInputRule &&
+               plugin !== wrapInOrderedListInputRule;
       }))
-      .use(gfm)
+      .use(gfm.filter(plugin => {
+        return plugin !== wrapInTaskListInputRule;
+      }))
       .use(history)
       .use(listener)
       .use(tabKeymapPlugin)
       .use(wikiLinkMilkdownPlugin)
+      .use(bulletListMilkdownPlugin)
+      .use(taskListMilkdownPlugin)
       .use(remoteCursorMilkdownPlugin)
       .use(indentGuidePlugin)
       .use(selectionBroadcastPlugin);
