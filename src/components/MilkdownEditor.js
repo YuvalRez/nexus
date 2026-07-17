@@ -60,6 +60,11 @@ const taskListMilkdownPlugin = $prose(() => new Plugin({
       },
       mousedown: (view, event) => {
         if (event.target.classList.contains('custom-task-checkbox')) {
+          if (!view.editable) {
+            event.preventDefault();
+            return true;
+          }
+          
           event.preventDefault();
           const pos = Number(event.target.getAttribute('data-pos'));
           const matchText = event.target.getAttribute('data-match');
