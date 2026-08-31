@@ -598,13 +598,10 @@ function preserveIndentationAndSyntax(markdown) {
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
     
-    // Convert empty lines into zero-width space paragraphs so they render visually
+    // We no longer inject \u200B for empty lines, to prevent the line multiplication bug
+    // Milkdown natively handles \n\n as separate paragraphs.
     if (line.trim() === '') {
-      if (newLines.length > 0 && newLines[newLines.length - 1] !== '') {
-        newLines.push('');
-      }
-      newLines.push('\u200B');
-      newLines.push('');
+      newLines.push(line);
       continue;
     }
     
