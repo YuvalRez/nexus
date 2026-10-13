@@ -42,7 +42,7 @@ export function SortableNexusItem({ nexus, user, handleDeleteNexus, handleLeaveN
                 e.stopPropagation();
                 handleDeleteNexus(nexus.id, e);
               }}
-              className="relative z-10 p-2 text-foreground/30 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+              className="relative z-10 p-2 text-foreground/40 md:text-foreground/30 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
               title="Delete Nexus"
             >
               <Trash2 className="w-4 h-4" />
@@ -54,7 +54,7 @@ export function SortableNexusItem({ nexus, user, handleDeleteNexus, handleLeaveN
                 e.stopPropagation();
                 handleLeaveNexus(nexus.id, e);
               }}
-              className="relative z-10 p-2 text-foreground/30 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+              className="relative z-10 p-2 text-foreground/40 md:text-foreground/30 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
               title="Leave Nexus"
             >
               <LogOut className="w-4 h-4" />

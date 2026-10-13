@@ -11,7 +11,7 @@ export default function ConfirmModal({ isOpen, onClose, onConfirm, title, messag
       onMouseDown={onClose}
     >
       <div 
-        className="bg-card w-full max-w-sm rounded-2xl shadow-2xl border border-border p-6 flex flex-col"
+        className="bg-card w-full max-w-sm rounded-2xl shadow-2xl border border-border p-5 sm:p-6 flex flex-col"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-4 mb-4">
@@ -24,10 +24,10 @@ export default function ConfirmModal({ isOpen, onClose, onConfirm, title, messag
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 mt-4">
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 mt-4">
           <button 
             onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-foreground/5 transition-colors"
+            className="px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-foreground/5 transition-colors text-center"
           >
             Cancel
           </button>
@@ -36,7 +36,7 @@ export default function ConfirmModal({ isOpen, onClose, onConfirm, title, messag
               onConfirm();
               onClose();
             }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors ${
+            className={`px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-colors text-center ${
               isDestructive ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20' : 'bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-500/20'
             }`}
           >

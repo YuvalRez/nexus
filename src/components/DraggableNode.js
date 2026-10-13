@@ -59,7 +59,7 @@ export function DraggableNode({ id, isOwner, isDragging, children, depth = 0, is
         {...(isOwner ? listeners : {})}
         className={`w-full relative rounded-lg transition-all ${
           isGroupOver ? "ring-2 ring-primary-500 bg-primary-500/10" : ""
-        } ${isOwner ? "cursor-grab touch-none" : ""}`}
+        } ${isOwner ? "cursor-grab touch-manipulation" : ""}`}
       >
         {children}
       </div>

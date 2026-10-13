@@ -93,7 +93,7 @@ export function FolderAccessControl({ folder, nexus, isOwner }) {
       </div>
 
       <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-border bg-foreground/5 flex items-center justify-between">
+        <div className="p-3 sm:p-4 border-b border-border bg-foreground/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h3 className="font-semibold flex items-center gap-2">
             <Users className="w-4 h-4" /> Nexus Viewers
             <span className="text-xs font-medium px-2 py-0.5 bg-background rounded-md text-foreground/50 border border-border ml-1">

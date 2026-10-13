@@ -177,11 +177,11 @@ export default function InviteModal({ isOpen, onClose, nexus }) {
         className="bg-card w-full max-w-md rounded-2xl shadow-2xl border border-border flex flex-col max-h-[85vh]"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-6 border-b border-border">
-          <h2 className="text-xl font-bold">Manage Access</h2>
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
+          <h2 className="text-lg sm:text-xl font-bold">Manage Access</h2>
           <button 
             onClick={onClose}
-            className="text-foreground/50 hover:text-foreground transition-colors"
+            className="text-foreground/50 hover:text-foreground transition-colors p-1"
           >
             <X className="w-5 h-5" />
           </button>
@@ -191,25 +191,25 @@ export default function InviteModal({ isOpen, onClose, nexus }) {
         <div className="flex border-b border-border">
           <button 
             onClick={() => setActiveTab("invite")}
-            className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === "invite" ? "border-primary-500 text-primary-500" : "border-transparent text-foreground/60 hover:text-foreground hover:bg-foreground/5"}`}
+            className={`flex-1 py-2.5 sm:py-3 text-xs sm:text-sm font-medium flex items-center justify-center gap-1.5 sm:gap-2 border-b-2 transition-colors ${activeTab === "invite" ? "border-primary-500 text-primary-500" : "border-transparent text-foreground/60 hover:text-foreground hover:bg-foreground/5"}`}
           >
             <Mail className="w-4 h-4" /> Invite
           </button>
           <button 
             onClick={() => setActiveTab("viewers")}
-            className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === "viewers" ? "border-primary-500 text-primary-500" : "border-transparent text-foreground/60 hover:text-foreground hover:bg-foreground/5"}`}
+            className={`flex-1 py-2.5 sm:py-3 text-xs sm:text-sm font-medium flex items-center justify-center gap-1.5 sm:gap-2 border-b-2 transition-colors ${activeTab === "viewers" ? "border-primary-500 text-primary-500" : "border-transparent text-foreground/60 hover:text-foreground hover:bg-foreground/5"}`}
           >
             <Users className="w-4 h-4" /> Viewers
           </button>
           <button 
             onClick={() => setActiveTab("pending")}
-            className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 border-b-2 transition-colors ${activeTab === "pending" ? "border-primary-500 text-primary-500" : "border-transparent text-foreground/60 hover:text-foreground hover:bg-foreground/5"}`}
+            className={`flex-1 py-2.5 sm:py-3 text-xs sm:text-sm font-medium flex items-center justify-center gap-1.5 sm:gap-2 border-b-2 transition-colors ${activeTab === "pending" ? "border-primary-500 text-primary-500" : "border-transparent text-foreground/60 hover:text-foreground hover:bg-foreground/5"}`}
           >
             <Clock className="w-4 h-4" /> Pending
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1">
           {/* INVITE TAB */}
           {activeTab === "invite" && (
             <div className="animate-fade-in-up">

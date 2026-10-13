@@ -79,7 +79,7 @@ export function TreeFolderItem({ folder, isOwner, activeNoteId, isSelected, onSe
               onDelete(folder.id);
             }}
             onPointerDown={(e) => e.stopPropagation()}
-            className={`shrink-0 p-1.5 mr-1 rounded-md cursor-pointer hover:bg-red-500/10 hover:text-red-600 text-foreground/30 opacity-0 group-hover:opacity-100 transition-all z-30`}
+            className="shrink-0 p-1.5 mr-1 rounded-md cursor-pointer hover:bg-red-500/10 hover:text-red-600 text-foreground/40 md:text-foreground/30 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all z-30"
             title="Delete folder"
           >
             <Trash2 className="w-3.5 h-3.5" />

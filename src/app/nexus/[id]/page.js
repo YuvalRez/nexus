@@ -7,9 +7,9 @@ import { doc, getDoc, getDocs, collection, query, where, onSnapshot, addDoc, ser
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
-import { Edit2, ArrowLeft, Users, File, Lock, FileUp, BookOpen, Save, Trash2, PlusCircle, ChevronLeft, ChevronRight, X, PanelRightClose, PanelRightOpen, RotateCcw, Folder, FileText, FolderPlus } from "lucide-react";
+import { Edit2, ArrowLeft, Users, File, Lock, FileUp, BookOpen, Save, Trash2, PlusCircle, ChevronLeft, ChevronRight, X, PanelRightClose, PanelRightOpen, RotateCcw, Folder, FileText, FolderPlus, Menu, Image as ImageIcon } from "lucide-react";
 import Link from "next/link";
-import { DndContext, closestCenter, pointerWithin, KeyboardSensor, PointerSensor, useSensor, useSensors, DragOverlay } from '@dnd-kit/core';
+import { DndContext, closestCenter, pointerWithin, KeyboardSensor, PointerSensor, MouseSensor, TouchSensor, useSensor, useSensors, DragOverlay } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, rectSortingStrategy } from '@dnd-kit/sortable';
 import { TreeNoteItem } from "@/components/SortableNoteItem";
 import { TreeFolderItem } from "@/components/FolderItem";
@@ -65,6 +65,10 @@ export default function NexusPage({ params }) {
   const [isGalleryCollapsed, setIsGalleryCollapsed] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isMobileGalleryOpen, setIsMobileGalleryOpen] = useState(false);
+  const touchStartXRef = useRef(0);
+
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [isNewMenuOpen, setIsNewMenuOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState(null);
@@ -74,7 +78,8 @@ export default function NexusPage({ params }) {
   const thumbnailContainerRef = useRef(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
@@ -602,6 +607,7 @@ export default function NexusPage({ params }) {
       setActiveNoteId(docRef.id);
       setEditTitle("Untitled Note");
       setIsEditingTitle(true);
+      setIsMobileSidebarOpen(false);
     } catch (err) {
       console.error("Failed to create note:", err);
     }
@@ -630,6 +636,7 @@ export default function NexusPage({ params }) {
         updatedAt: serverTimestamp(),
       });
       setActiveNoteId(docRef.id);
+      setIsMobileSidebarOpen(true);
     } catch (err) {
       console.error("Failed to create folder:", err);
     }
@@ -906,7 +913,10 @@ export default function NexusPage({ params }) {
             isOwner={isOwner}
             activeNoteId={activeNoteId}
             isSelected={activeNoteId === item.id}
-            onSelect={setActiveNoteId}
+            onSelect={(id) => {
+              setActiveNoteId(id);
+              setIsMobileSidebarOpen(true);
+            }}
             onDelete={async (id) => {
               setConfirmConfig({
                 title: "Delete Folder",
@@ -950,7 +960,10 @@ export default function NexusPage({ params }) {
             note={item}
             isOwner={isOwner}
             isSelected={activeNoteId === item.id}
-            onSelect={setActiveNoteId}
+            onSelect={(id) => {
+              setActiveNoteId(id);
+              setIsMobileSidebarOpen(false);
+            }}
             onDelete={handleDeleteNote}
           />
         )}
@@ -958,12 +971,80 @@ export default function NexusPage({ params }) {
     ));
   };
 
+  const renderGalleryContent = () => (
+    <div 
+      className="flex-1 overflow-y-auto p-4 grid gap-4 content-start"
+      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}
+    >
+      {activeNote?.images && activeNote.images.length > 0 ? (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleGalleryDragEnd}
+        >
+          <SortableContext
+            items={activeNote.images}
+            strategy={rectSortingStrategy}
+          >
+            {activeNote.images.map((url, idx) => (
+              <SortableImageItem 
+                key={url}
+                url={url}
+                idx={idx}
+                isOwner={isOwner}
+                setZoomedImageIndex={setZoomedImageIndex}
+                onRemove={(urlToRemove) => {
+                  setConfirmConfig({
+                    title: "Delete Image",
+                    message: "Are you sure you want to permanently delete this image from the gallery?",
+                    onConfirm: async () => {
+                      await updateDoc(doc(db, "notes", activeNote.id), {
+                        images: activeNote.images.filter((url) => url !== urlToRemove)
+                      });
+                      checkAndDeleteOrphanedImages([urlToRemove]);
+                    }
+                  });
+                }}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
+      ) : (
+        <div className="relative border-2 border-dashed border-border rounded-xl" style={{ paddingBottom: '100%' }}>
+          <div className="absolute inset-0 flex items-center justify-center px-4 text-center">
+            <p className="text-sm text-foreground/50">No images yet.</p>
+          </div>
+        </div>
+      )}
+
+      {isOwner && (
+        <div className="relative" style={{ paddingBottom: '100%' }}>
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            ref={imageInputRef}
+            onChange={(e) => handleImageUpload(Array.from(e.target.files))}
+            className="hidden"
+          />
+          <button
+            onClick={() => imageInputRef.current?.click()}
+            className="absolute inset-0 w-full h-full border-2 border-dashed border-primary-500/30 rounded-xl hover:border-primary-500 hover:bg-primary-500/5 transition-all flex flex-col items-center justify-center gap-2 text-primary-500"
+          >
+            <PlusCircle className="w-6 h-6" />
+            <span className="text-sm font-medium">Add Images</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex h-screen bg-background overflow-hidden animate-fade-in-up">
       
       {/* Markdown Drag Zone Wrapper (Left Side) */}
       <div 
-        className="flex-1 flex relative"
+        className="flex-1 flex relative w-full min-w-0 overflow-hidden"
         onDragOver={handleMdDragOver}
         onDragLeave={handleMdDragLeave}
         onDrop={handleMdDrop}
@@ -977,13 +1058,36 @@ export default function NexusPage({ params }) {
           </div>
         )}
 
+        {/* Mobile Sidebar Backdrop */}
+        {isMobileSidebarOpen && (
+          <div 
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden animate-fade-in"
+            onClick={() => setIsMobileSidebarOpen(false)}
+          />
+        )}
+
         {/* Sidebar */}
-      <div className="w-72 bg-card border-r border-border flex flex-col flex-shrink-0 relative z-20 shadow-2xl">
+      <div className={`
+        fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-card border-r border-border flex flex-col flex-shrink-0 shadow-2xl transition-transform duration-300 ease-in-out
+        md:relative md:translate-x-0 md:z-20
+        ${isMobileSidebarOpen || !activeNote ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}>
         <div className="p-4 border-b border-border">
-          <Link href="/dashboard" className="flex items-center gap-2 text-sm text-foreground/60 hover:text-foreground mb-4 transition-colors">
-            <ArrowLeft className="w-4 h-4" />
-            Back to Dashboard
-          </Link>
+          <div className="flex items-center justify-between mb-4">
+            <Link href="/dashboard" className="flex items-center gap-2 text-sm text-foreground/60 hover:text-foreground transition-colors">
+              <ArrowLeft className="w-4 h-4" />
+              Back to Dashboard
+            </Link>
+            {activeNote && (
+              <button
+                onClick={() => setIsMobileSidebarOpen(false)}
+                className="md:hidden p-1 text-foreground/50 hover:text-foreground hover:bg-foreground/5 rounded-md transition-colors"
+                title="Close menu"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
           <div className="flex items-center justify-between mb-1 gap-2">
             {isEditingNexusName ? (
               <input 
@@ -1002,7 +1106,7 @@ export default function NexusPage({ params }) {
                 {isOwner && (
                   <button
                     onClick={startEditingNexus}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-foreground/40 hover:text-primary-500 transition-all rounded shrink-0"
+                    className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 text-foreground/40 hover:text-primary-500 transition-all rounded shrink-0"
                     title="Edit Nexus Name"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
@@ -1110,43 +1214,73 @@ export default function NexusPage({ params }) {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex bg-background relative z-10 overflow-hidden">
+      <div className="flex-1 flex bg-background relative z-10 overflow-hidden w-full min-w-0">
         {activeNote ? (
           <>
             <div className="flex-1 flex flex-col min-w-0">
-              <header className="h-16 border-b border-border flex items-center justify-between px-6 bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-                {isEditingTitle ? (
-                  <input 
-                    type="text"
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && saveTitle()}
-                    onBlur={saveTitle}
-                    autoFocus
-                    className="bg-background border border-border px-3 py-1.5 rounded-lg font-bold text-xl focus:outline-none focus:ring-2 focus:ring-primary-500 w-1/2"
-                  />
-                ) : (
-                  <div className="flex items-center gap-2 group cursor-pointer" onClick={startEditingTitle}>
-                    <h1 className="font-bold text-xl truncate">{activeNote.title}</h1>
-                    {isOwner && <Edit2 className="w-4 h-4 opacity-0 group-hover:opacity-100 text-foreground/40 hover:text-primary-500 transition-all" />}
-                  </div>
-                )}
+              <header className="min-h-16 h-auto border-b border-border flex items-center justify-between px-3 sm:px-6 bg-card/50 backdrop-blur-sm sticky top-0 z-10 py-2.5 gap-2">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <button
+                    onClick={() => setIsMobileSidebarOpen(true)}
+                    className="md:hidden p-2 -ml-1 text-foreground/70 hover:text-foreground hover:bg-foreground/5 rounded-lg flex items-center gap-1.5 transition-colors shrink-0"
+                    title="Open Notes list"
+                  >
+                    <Menu className="w-5 h-5" />
+                  </button>
+                  {isEditingTitle ? (
+                    <input 
+                      type="text"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && saveTitle()}
+                      onBlur={saveTitle}
+                      autoFocus
+                      className="bg-background border border-border px-3 py-1.5 rounded-lg font-bold text-base sm:text-xl focus:outline-none focus:ring-2 focus:ring-primary-500 w-full min-w-0"
+                    />
+                  ) : (
+                    <div className="flex items-start sm:items-center gap-2 group cursor-pointer min-w-0 flex-1 py-0.5" onClick={startEditingTitle}>
+                      <h1 className="font-bold text-base sm:text-xl text-foreground break-words whitespace-normal leading-snug">
+                        {activeNote.title}
+                      </h1>
+                      {isOwner && (
+                        <Edit2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 mt-1 sm:mt-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 text-foreground/40 hover:text-primary-500 transition-all" />
+                      )}
+                    </div>
+                  )}
+                </div>
                 
-                {/* Removed auto-saving indicator */}
-                <div className="flex items-center gap-4">
+                {/* Header Actions */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* Desktop Gallery Toggle */}
                   <button 
                     onClick={() => setIsGalleryCollapsed(!isGalleryCollapsed)}
-                    className="p-1.5 hover:bg-foreground/10 rounded-lg text-foreground/60 hover:text-foreground transition-all"
+                    className="hidden md:flex p-1.5 hover:bg-foreground/10 rounded-lg text-foreground/60 hover:text-foreground transition-all"
                     title={isGalleryCollapsed ? "Show Gallery" : "Hide Gallery"}
                   >
                     {isGalleryCollapsed ? <PanelRightOpen className="w-5 h-5" /> : <PanelRightClose className="w-5 h-5" />}
                   </button>
+
+                  {/* Mobile Gallery Toggle (only if not folder) */}
+                  {!activeNote.isFolder && (
+                    <button 
+                      onClick={() => setIsMobileGalleryOpen(true)}
+                      className="relative md:hidden p-2 hover:bg-foreground/10 rounded-lg text-foreground/70 hover:text-foreground transition-all flex items-center gap-1 shrink-0"
+                      title="Open Gallery"
+                    >
+                      <ImageIcon className="w-5 h-5" />
+                      {activeNote.images && activeNote.images.length > 0 && (
+                        <span className="bg-primary-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-tight">
+                          {activeNote.images.length}
+                        </span>
+                      )}
+                    </button>
+                  )}
                 </div>
               </header>
               
               {/* Left Side: Milkdown Live Preview Editor OR Folder Grid */}
-              <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-background relative flex flex-col items-center">
-                <div className="w-full max-w-[800px] mt-8 flex-1 flex flex-col">
+              <div className="flex-1 overflow-y-auto p-3 sm:p-8 bg-background relative flex flex-col items-center w-full min-w-0">
+                <div className="w-full max-w-[800px] mt-2 sm:mt-8 flex-1 flex flex-col min-w-0">
                   {activeNote.isFolder ? (
                     isOwner ? (
                       <FolderAccessControl 
@@ -1186,11 +1320,11 @@ export default function NexusPage({ params }) {
       </div>
       </div>
 
-      {/* Right Side: Image Gallery (Only if note is active and it's NOT a folder) */}
+      {/* Desktop Image Gallery (Only >= md) */}
       {activeNote && !activeNote.isFolder && (
         <div 
           style={{ width: isGalleryCollapsed ? '0px' : `${galleryWidth}px`, transition: isResizing ? 'none' : 'width 0.3s ease' }}
-          className="border-l border-border bg-card flex flex-col flex-shrink-0 z-20 relative overflow-hidden"
+          className="hidden md:flex border-l border-border bg-card flex-col flex-shrink-0 z-20 relative overflow-hidden"
           onDragOver={handleImageDragOver}
           onDragLeave={handleImageDragLeave}
           onDrop={handleImageDrop}
@@ -1224,72 +1358,34 @@ export default function NexusPage({ params }) {
               <RotateCcw className="w-4 h-4" />
             </button>
           </div>
-          <div 
-            className="flex-1 overflow-y-auto p-4 grid gap-4 content-start"
-            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}
-          >
-            {activeNote.images && activeNote.images.length > 0 ? (
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleGalleryDragEnd}
-              >
-                <SortableContext
-                  items={activeNote.images}
-                  strategy={rectSortingStrategy}
-                >
-                  {activeNote.images.map((url, idx) => (
-                    <SortableImageItem 
-                      key={url} // ID must match the string URL exactly
-                      url={url}
-                      idx={idx}
-                      isOwner={isOwner}
-                      setZoomedImageIndex={setZoomedImageIndex}
-                      onRemove={(urlToRemove) => {
-                        setConfirmConfig({
-                          title: "Delete Image",
-                          message: "Are you sure you want to permanently delete this image from the gallery?",
-                          onConfirm: async () => {
-                            await updateDoc(doc(db, "notes", activeNote.id), {
-                              images: activeNote.images.filter((url) => url !== urlToRemove)
-                            });
-                            checkAndDeleteOrphanedImages([urlToRemove]);
-                          }
-                        });
-                      }}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
-            ) : (
-              <div className="relative border-2 border-dashed border-border rounded-xl" style={{ paddingBottom: '100%' }}>
-                <div className="absolute inset-0 flex items-center justify-center px-4 text-center">
-                  <p className="text-sm text-foreground/50">No images yet.</p>
-                </div>
-              </div>
-            )}
-
-            {isOwner && (
-              <div className="relative" style={{ paddingBottom: '100%' }}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  ref={imageInputRef}
-                  onChange={(e) => handleImageUpload(Array.from(e.target.files))}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => imageInputRef.current?.click()}
-                  className="absolute inset-0 w-full h-full border-2 border-dashed border-primary-500/30 rounded-xl hover:border-primary-500 hover:bg-primary-500/5 transition-all flex flex-col items-center justify-center gap-2 text-primary-500"
-                >
-                  <PlusCircle className="w-6 h-6" />
-                  <span className="text-sm font-medium">Add Images</span>
-                </button>
-              </div>
-            )}
-          </div>
+          {renderGalleryContent()}
         </div>
+      )}
+
+      {/* Mobile Image Gallery Drawer (Only < md and when open) */}
+      {isMobileGalleryOpen && activeNote && !activeNote.isFolder && (
+        <>
+          <div 
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden animate-fade-in"
+            onClick={() => setIsMobileGalleryOpen(false)}
+          />
+          <div className="fixed inset-y-0 right-0 z-50 w-full max-w-xs bg-card border-l border-border flex flex-col shadow-2xl md:hidden animate-fade-in">
+            <div className="h-16 border-b border-border flex items-center justify-between px-6 bg-card/50 backdrop-blur-sm sticky top-0">
+              <h3 className="font-semibold flex items-center gap-2">
+                Gallery
+                {isUploadingImage && <div className="w-3 h-3 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>}
+              </h3>
+              <button 
+                onClick={() => setIsMobileGalleryOpen(false)}
+                title="Close Gallery"
+                className="p-1.5 hover:bg-foreground/10 rounded-lg text-foreground/60 hover:text-foreground transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {renderGalleryContent()}
+          </div>
+        </>
       )}
 
       <InviteModal 
@@ -1309,30 +1405,46 @@ export default function NexusPage({ params }) {
         <div 
           className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-center justify-center animate-fade-in select-none"
           onClick={() => setZoomedImageIndex(null)}
+          onTouchStart={(e) => {
+            touchStartXRef.current = e.changedTouches[0].clientX;
+          }}
+          onTouchEnd={(e) => {
+            const touchEndX = e.changedTouches[0].clientX;
+            const diff = touchEndX - touchStartXRef.current;
+            if (Math.abs(diff) > 40 && !isDeepZoomed) {
+              if (diff < 0) {
+                // Swiped left -> next image
+                setZoomedImageIndex(prev => prev < activeNote.images.length - 1 ? prev + 1 : 0);
+              } else {
+                // Swiped right -> prev image
+                setZoomedImageIndex(prev => prev > 0 ? prev - 1 : activeNote.images.length - 1);
+              }
+            }
+          }}
         >
           {/* Previous Area (Left Bar) */}
           <div 
-            className="absolute left-0 top-0 bottom-0 w-24 sm:w-32 flex items-center justify-start pl-4 sm:pl-8 group cursor-pointer z-50"
+            className="absolute left-0 top-0 bottom-0 w-16 sm:w-32 flex items-center justify-start pl-2 sm:pl-8 group cursor-pointer z-50"
             onClick={(e) => {
               e.stopPropagation();
               setZoomedImageIndex(prev => prev > 0 ? prev - 1 : activeNote.images.length - 1);
             }}
           >
-            <div className="bg-black/50 p-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-              <ChevronLeft className="w-10 h-10 text-white" />
+            <div className="bg-black/50 p-2 sm:p-3 rounded-full opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+              <ChevronLeft className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
             </div>
           </div>
 
           {/* Next Area (Right Bar) */}
           <div 
-            className="absolute right-0 top-0 bottom-0 w-24 sm:w-32 flex items-center justify-end pr-4 sm:pr-8 group cursor-pointer z-50"
+            className="absolute right-0 top-0 bottom-0 w-16 sm:w-32 flex items-center justify-end pr-2 sm:pr-8 group cursor-pointer z-50"
             onClick={(e) => {
               e.stopPropagation();
               setZoomedImageIndex(prev => prev < activeNote.images.length - 1 ? prev + 1 : 0);
             }}
           >
-            <div className="bg-black/50 p-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-              <ChevronRight className="w-10 h-10 text-white" />
+            <div className="bg-black/50 p-2 sm:p-3 rounded-full opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+              <ChevronRight className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
             </div>
           </div>
 
@@ -1405,7 +1517,7 @@ export default function NexusPage({ params }) {
           {/* Thumbnail Strip */}
           <div 
             ref={thumbnailContainerRef}
-            className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 max-w-[780px] overflow-x-auto p-4 bg-black/40 backdrop-blur-md rounded-2xl z-50"
+            className="absolute bottom-3 sm:bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 sm:gap-3 max-w-[95vw] sm:max-w-[780px] overflow-x-auto p-2 sm:p-4 bg-black/40 backdrop-blur-md rounded-xl sm:rounded-2xl z-50"
             onClick={(e) => e.stopPropagation()}
             onWheel={(e) => {
               if (e.deltaY !== 0) {
@@ -1419,7 +1531,7 @@ export default function NexusPage({ params }) {
                 key={i}
                 src={imgUrl}
                 alt={`Thumbnail ${i}`}
-                className={`w-16 h-16 object-cover rounded-xl cursor-pointer shrink-0 transition-all duration-300 ${i === zoomedImageIndex ? 'border-2 border-primary-500 scale-110 opacity-100 shadow-lg' : 'opacity-50 hover:opacity-100 hover:scale-105'}`}
+                className={`w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-lg sm:rounded-xl cursor-pointer shrink-0 transition-all duration-300 ${i === zoomedImageIndex ? 'border-2 border-primary-500 scale-105 sm:scale-110 opacity-100 shadow-lg' : 'opacity-50 hover:opacity-100 hover:scale-105'}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   setZoomedImageIndex(i);
@@ -1430,13 +1542,13 @@ export default function NexusPage({ params }) {
 
           {/* Close Button */}
           <button 
-            className="absolute top-6 right-6 z-[60] text-white/50 hover:text-white transition-colors bg-black/20 hover:bg-black/40 p-2 rounded-full"
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 z-[60] text-white/70 hover:text-white transition-colors bg-black/40 hover:bg-black/60 p-2 rounded-full"
             onClick={(e) => {
               e.stopPropagation();
               setZoomedImageIndex(null);
             }}
           >
-            <X className="w-8 h-8" />
+            <X className="w-6 h-6 sm:w-8 sm:h-8" />
           </button>
         </div>
       )}

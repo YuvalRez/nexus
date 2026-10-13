@@ -8,7 +8,7 @@ import Link from "next/link";
 import { Plus, Folder, Clock, X, Trash2, LogOut, Check, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 import ConfirmModal from "@/components/ConfirmModal";
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, MouseSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, rectSortingStrategy } from '@dnd-kit/sortable';
 import { SortableNexusItem } from "@/components/SortableNexusItem";
 
@@ -23,7 +23,8 @@ export default function DashboardPage() {
   const [confirmConfig, setConfirmConfig] = useState(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
@@ -198,7 +199,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card sticky top-0 z-40">
-        <div className="container mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="container mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary-400 to-primary-600">
               Nexus Dashboard
@@ -210,7 +211,7 @@ export default function DashboardPage() {
             </span>
             <button
               onClick={() => logout()}
-              className="text-sm px-4 py-2 rounded-lg hover:bg-foreground/5 text-foreground/70 transition-colors"
+              className="text-sm px-3 sm:px-4 py-2 rounded-lg hover:bg-foreground/5 text-foreground/70 transition-colors"
             >
               Sign Out
             </button>
@@ -218,32 +219,32 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <main className="container mx-auto px-6 py-12 max-w-5xl animate-fade-in-up">
+      <main className="container mx-auto px-4 sm:px-6 py-6 sm:py-12 max-w-5xl animate-fade-in-up">
         
         {/* Pending Invites Section */}
         {pendingInvites.length > 0 && (
-          <div className="mb-12">
-            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-              <Mail className="w-6 h-6 text-primary-500" />
+          <div className="mb-8 sm:mb-12">
+            <h2 className="text-xl sm:text-2xl font-bold mb-4 flex items-center gap-2">
+              <Mail className="w-5 h-5 sm:w-6 sm:h-6 text-primary-500" />
               Pending Invitations
             </h2>
             <div className="grid gap-4">
               {pendingInvites.map((invite) => (
                 <div key={invite.id} className="bg-primary-500/10 border border-primary-500/20 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
                   <div>
-                    <h3 className="font-semibold text-lg text-primary-600">You've been invited to "{invite.nexusName}"</h3>
+                    <h3 className="font-semibold text-base sm:text-lg text-primary-600">You've been invited to "{invite.nexusName}"</h3>
                     <p className="text-sm text-foreground/60 mt-1">Accept the invitation to collaborate and view markdown notes.</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button 
                       onClick={() => handleAcceptInvite(invite)}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
+                      className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors"
                     >
                       <Check className="w-4 h-4" /> Accept
                     </button>
                     <button 
                       onClick={() => handleDeclineInvite(invite.id)}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-background border border-border rounded-lg text-sm font-medium hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/30 transition-colors"
+                      className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 bg-background border border-border rounded-lg text-sm font-medium hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/30 transition-colors"
                     >
                       <X className="w-4 h-4" /> Decline
                     </button>
@@ -254,14 +255,14 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
           <div>
-            <h2 className="text-3xl font-bold mb-2">Your Workspaces</h2>
-            <p className="text-foreground/60">Create or select a Nexus to start organizing your markdown notes.</p>
+            <h2 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">Your Workspaces</h2>
+            <p className="text-sm sm:text-base text-foreground/60">Create or select a Nexus to start organizing your markdown notes.</p>
           </div>
           <button
             onClick={() => setIsCreating(true)}
-            className="flex items-center gap-2 bg-primary-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-primary-700 transition-all shadow-lg shadow-primary-500/20"
+            className="flex items-center justify-center gap-2 bg-primary-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-primary-700 transition-all shadow-lg shadow-primary-500/20 shrink-0"
           >
             <Plus className="w-5 h-5" />
             New Nexus
@@ -269,14 +270,14 @@ export default function DashboardPage() {
         </div>
 
         {isCreating && (
-          <div className="mb-8 p-6 bg-card border border-border rounded-2xl shadow-sm animate-fade-in-up">
+          <div className="mb-6 sm:mb-8 p-4 sm:p-6 bg-card border border-border rounded-2xl shadow-sm animate-fade-in-up">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Create New Nexus</h3>
               <button onClick={() => setIsCreating(false)} className="text-foreground/50 hover:text-foreground">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <form onSubmit={handleCreateNexus} className="flex gap-3">
+            <form onSubmit={handleCreateNexus} className="flex flex-col sm:flex-row gap-3">
               <input
                 type="text"
                 autoFocus
@@ -288,7 +289,7 @@ export default function DashboardPage() {
               />
               <button
                 type="submit"
-                className="bg-primary-600 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-primary-700 transition-colors"
+                className="bg-primary-600 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-primary-700 transition-colors shrink-0"
               >
                 Create
               </button>

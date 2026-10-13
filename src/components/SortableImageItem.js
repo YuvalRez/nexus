@@ -48,7 +48,7 @@ export function SortableImageItem({ url, idx, isOwner, setZoomedImageIndex, onRe
             e.stopPropagation();
             onRemove(url);
           }}
-          className="absolute top-2 right-2 p-1.5 bg-red-500/80 text-white rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all z-10 cursor-pointer"
+          className="absolute top-2 right-2 p-1.5 bg-red-500/80 text-white rounded-lg opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-red-600 transition-all z-10 cursor-pointer"
         >
           <Trash2 className="w-4 h-4" />
         </button>

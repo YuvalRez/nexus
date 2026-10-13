@@ -17,6 +17,13 @@ export const metadata = {
   description: "A secure, simple, and modern markdown notes sharing platform.",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#030712",
+};
+
 export default function RootLayout({ children }) {
   return (
     <html

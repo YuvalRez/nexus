@@ -78,6 +78,8 @@
   color: rgba(255, 255, 255, 0.9);
   max-width: none;
   line-height: 1.6;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .prose p {
   margin-top: 0.75em;
@@ -286,6 +288,8 @@
   flex-grow: 1;
   min-height: 500px;
   white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* Fix milkdown list block drops */

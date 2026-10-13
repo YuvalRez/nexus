@@ -63,7 +63,7 @@ export default function SignupPage() {
       <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[100px] -z-10" />
 
       <div className="w-full max-w-md animate-fade-in-up">
-        <div className="bg-card border border-border p-8 rounded-3xl shadow-2xl">
+        <div className="bg-card border border-border p-6 sm:p-8 rounded-2xl sm:rounded-3xl shadow-2xl">
           <div className="flex flex-col items-center mb-8">
             <Link href="/" className="flex items-center gap-2 mb-6">
               <BookOpen className="w-8 h-8 text-primary-500" />
