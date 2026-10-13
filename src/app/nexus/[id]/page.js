@@ -175,16 +175,25 @@ export default function NexusPage({ params }) {
   // Load gallery settings from local storage
   useEffect(() => {
     const savedWidth = localStorage.getItem("nexus_gallery_width");
-    const savedCollapsed = localStorage.getItem("nexus_gallery_collapsed");
-    if (savedWidth) setGalleryWidth(parseInt(savedWidth, 10));
-    if (savedCollapsed) setIsGalleryCollapsed(savedCollapsed === "true");
+    if (savedWidth) {
+      const parsed = parseInt(savedWidth, 10);
+      if (parsed >= 200 && parsed <= 1200) {
+        setGalleryWidth(parsed);
+      }
+    }
+    // Ensure gallery starts expanded on desktop
+    setIsGalleryCollapsed(false);
+    try {
+      localStorage.removeItem("nexus_gallery_collapsed");
+    } catch (e) {}
   }, []);
 
   // Save gallery settings to local storage
   useEffect(() => {
-    localStorage.setItem("nexus_gallery_width", galleryWidth.toString());
-    localStorage.setItem("nexus_gallery_collapsed", isGalleryCollapsed.toString());
-  }, [galleryWidth, isGalleryCollapsed]);
+    try {
+      localStorage.setItem("nexus_gallery_width", galleryWidth.toString());
+    } catch (e) {}
+  }, [galleryWidth]);
 
   // Window mouse events for resizing
   useEffect(() => {
@@ -1044,7 +1053,7 @@ export default function NexusPage({ params }) {
       
       {/* Markdown Drag Zone Wrapper (Left Side) */}
       <div 
-        className="flex-1 flex relative w-full min-w-0 overflow-hidden"
+        className="flex-1 flex relative min-w-0"
         onDragOver={handleMdDragOver}
         onDragLeave={handleMdDragLeave}
         onDrop={handleMdDrop}
@@ -1214,7 +1223,7 @@ export default function NexusPage({ params }) {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex bg-background relative z-10 overflow-hidden w-full min-w-0">
+      <div className="flex-1 flex bg-background relative z-10 overflow-hidden min-w-0">
         {activeNote ? (
           <>
             <div className="flex-1 flex flex-col min-w-0">
@@ -1251,14 +1260,16 @@ export default function NexusPage({ params }) {
                 
                 {/* Header Actions */}
                 <div className="flex items-center gap-2 shrink-0">
-                  {/* Desktop Gallery Toggle */}
-                  <button 
-                    onClick={() => setIsGalleryCollapsed(!isGalleryCollapsed)}
-                    className="hidden md:flex p-1.5 hover:bg-foreground/10 rounded-lg text-foreground/60 hover:text-foreground transition-all"
-                    title={isGalleryCollapsed ? "Show Gallery" : "Hide Gallery"}
-                  >
-                    {isGalleryCollapsed ? <PanelRightOpen className="w-5 h-5" /> : <PanelRightClose className="w-5 h-5" />}
-                  </button>
+                  {/* Desktop Gallery Toggle (only if not folder) */}
+                  {!activeNote.isFolder && (
+                    <button 
+                      onClick={() => setIsGalleryCollapsed(!isGalleryCollapsed)}
+                      className="desktop-gallery-toggle p-1.5 hover:bg-foreground/10 rounded-lg text-foreground/60 hover:text-foreground transition-all"
+                      title={isGalleryCollapsed ? "Show Gallery" : "Hide Gallery"}
+                    >
+                      {isGalleryCollapsed ? <PanelRightOpen className="w-5 h-5" /> : <PanelRightClose className="w-5 h-5" />}
+                    </button>
+                  )}
 
                   {/* Mobile Gallery Toggle (only if not folder) */}
                   {!activeNote.isFolder && (
@@ -1324,7 +1335,7 @@ export default function NexusPage({ params }) {
       {activeNote && !activeNote.isFolder && (
         <div 
           style={{ width: isGalleryCollapsed ? '0px' : `${galleryWidth}px`, transition: isResizing ? 'none' : 'width 0.3s ease' }}
-          className="hidden md:flex border-l border-border bg-card flex-col flex-shrink-0 z-20 relative overflow-hidden"
+          className="desktop-gallery-panel border-l border-border bg-card flex-col flex-shrink-0 z-20 relative overflow-hidden"
           onDragOver={handleImageDragOver}
           onDragLeave={handleImageDragLeave}
           onDrop={handleImageDrop}
